@@ -6,10 +6,8 @@ For dev work:
 pre-commit install
 ```
 
-Probably just use Conda
-
-```python
-conda create -n adv_rl python=3.12
-conda activate adv_rl
-pip install -r requirements.txt
-```
+# docker
+This is setup to run with devcontainers.
+Upon opening the window with this folder, you should get prompted to launch with devcontainers.
+Click ok and the image build will start (takes a while on the first build). Once that completes, you will be attached to the docker container.
+Dev workflow is the same as if you were coding locally. Make sure to push your changes to a branch before killing though, as it is ephemeral.
