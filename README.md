@@ -7,9 +7,7 @@ pre-commit install
 ```
 
 # docker
-Ideally we would dev completely in gpu enabled dev containers. There's something incompatible with docker desktop and nvidia cuda runtimes that doesn't allow this out of the box: https://forums.docker.com/t/nvidia-cuda-doesnt-work-on-docker-desktop-but-works-on-docker-engine/130668 ...
 
-You can still dev in a cuda container, but don't try to train models out of it.
 ### dev container
 
 Download the devcontainers vscode extension: https://code.visualstudio.com/docs/devcontainers/containers (or just in vscode extensions pane)
@@ -17,6 +15,9 @@ Download the devcontainers vscode extension: https://code.visualstudio.com/docs/
 This is setup to run with devcontainers. Upon opening the window with this folder, you should get prompted to launch with devcontainers.
 Click ok and the image build will start (takes a while on the first build). Once that completes, you will be attached to the docker container.
 Dev workflow is the same as if you were coding locally. Make sure to push your changes to a branch before killing though, as it is ephemeral.
+
+Note: make sure you are not using docker desktop context. `docker context use default` before running devcontainers due to incompatibility with nvidia cuda and devcontainers.
+
 
 ### official docker way
 ```bash
