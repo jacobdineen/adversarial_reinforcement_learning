@@ -1,0 +1,14 @@
+frontend/build
+.pytest_cache
+
+*.csv
+*.json
+*.pkl
+*.html
+*.bin
+*.png
+*.svg
+
+*.pyc
+/__pycache__/
+/data

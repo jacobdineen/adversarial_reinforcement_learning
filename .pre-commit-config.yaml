@@ -1,0 +1,78 @@
+repos:
+-   repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+    - id: isort
+      args: ["--profile", "black", "--filter-files"]
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+    - id: check-yaml
+    - id: check-toml
+    - id: check-json
+      exclude: |
+          (?x)^(
+              .*/test/.*.json
+          )$
+    - id: end-of-file-fixer
+    - id: trailing-whitespace
+    - id: pretty-format-json
+      args:
+        - "--autofix"
+        - "--no-sort-keys"
+      exclude: (?x)^(.*/test/.*.json)$
+    - id: requirements-txt-fixer
+    - id: check-merge-conflict
+    - id: debug-statements
+    - id: mixed-line-ending
+    - id: name-tests-test
+    - id: fix-encoding-pragma
+    - id: check-added-large-files
+    - id: check-case-conflict
+    - id: check-symlinks
+    - id: check-docstring-first
+    - id: detect-private-key
+    - id: requirements-txt-fixer
+    - id: sort-simple-yaml
+-   repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+    - id: black
+      args: [--line-length=120]
+-   repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.50.0
+    hooks:
+    - id: terraform_fmt
+-   repo: https://github.com/pre-commit/mirrors-pylint
+    rev: 'v3.0.0a4'  # Use the sha / tag you want to point at
+    hooks:
+    -   id: pylint
+        args:
+        - --max-line-length=120
+        - --ignore-imports=yes
+        - -d duplicate-code
+
+-   repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: sh -c "python3 -m pytest -vvv; ret=$?; [ $ret = 5 ] && exit 0 || exit $ret"
+        language: system
+        pass_filenames: false
+        always_run: true
+-   repo: local
+    hooks:
+    -   id: remove-pycache
+        name: Remove __pycache__
+        entry: bash -c 'find . -type d -name __pycache__ -exec rm -r {} +'
+        language: system
+        pass_filenames: false
+        always_run: true
+-   repo: local
+    hooks:
+    -   id: remove-caches
+        name: Remove caches
+        entry: bash -c 'find . -type d -name __pycache__ -exec rm -r {} + && rm -rf .pytest_cache'
+        language: system
+        pass_filenames: false
+        always_run: true
