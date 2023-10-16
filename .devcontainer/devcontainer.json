@@ -1,0 +1,5 @@
+{
+  "name": "adv_rl_docker",
+  "context": "..",
+  "dockerFile": "../Dockerfile"
+}
