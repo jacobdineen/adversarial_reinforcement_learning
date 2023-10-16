@@ -1,30 +1,30 @@
-FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.2.0-base-ubuntu22.04
 
 WORKDIR /app
 
-# Install basic utilities and software
 RUN apt-get update && apt-get install -y \
     vim \
     zsh \
     curl \
     git \
-    python3.10 \
-    python3-pip
-
-# RUN curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-#   && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-#     sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-#     sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list \
-#   && \
-#     sudo apt-get update
-
-# RUN sudo apt-get install -y nvidia-container-toolkit
+    sudo \
+    python3-pip \
+    python3-dev
 
 # Copy the requirements file into the container
 COPY docker_requirements.txt .
 
-# Install Python packages
+# Install Python3 and Pip
+RUN apt-get install -y python3-pip
+
+# Install the packages from the requirements file
 RUN pip3 install --no-cache-dir -r docker_requirements.txt
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install PyTorch and torchvision
+RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/whl/cu111/torch_stable.html
 
 # Copy the rest of the application code into the container
 COPY . .
@@ -37,5 +37,5 @@ RUN sh -c "$(curl -L https://github.com/deluan/zsh-in-docker/releases/download/v
     -p https://github.com/zsh-users/zsh-syntax-highlighting \
     -p https://github.com/zsh-users/zsh-completions
 
-# Set the command to run ZSH by default
+# Set the command to run your application
 CMD ["zsh"]

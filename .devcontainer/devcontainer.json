@@ -1,5 +1,18 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.245.0/containers/docker-existing-dockerfile
 {
-  "name": "adv_rl_docker",
-  "context": "..",
-  "dockerFile": "../Dockerfile"
+	"name": "adv_rl_docker",
+
+	// Sets the run context to one level up instead of the .devcontainer folder.
+	"context": "..",
+
+	// Update the 'dockerFile' property if you aren't using the standard 'Dockerfile' filename.
+	"dockerFile": "../Dockerfile"
+	// "mounts": [
+	// 	"source=/usr/lib/x86_64-linux-gnu,target=/usr/lib/x86_64-linux-gnu,type=bind"
+	// ],
+
+    // "runArgs": ["--gpus", "all"],
+    // "overrideCommand": false,
+    // "postCreateCommand": "nvidia-smi"
 }
