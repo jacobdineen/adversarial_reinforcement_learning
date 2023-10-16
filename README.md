@@ -6,6 +6,13 @@ For dev work:
 pre-commit install
 ```
 
+Conda local dev:
+```python
+conda create -n adv_rl python=3.10
+conda activate adv_rl
+pip install -r docker_requirements.txt
+```
+
 # docker
 
 ### dev container
