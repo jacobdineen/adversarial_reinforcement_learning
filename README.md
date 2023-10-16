@@ -7,8 +7,8 @@ pre-commit install
 ```
 
 # docker
-Download the devcontainers vscode extension
-![Alt text](image.png)
+Download the devcontainers vscode extension: https://code.visualstudio.com/docs/devcontainers/containers (or just in vscode extensions pane)
+
 
 This is setup to run with devcontainers. Upon opening the window with this folder, you should get prompted to launch with devcontainers.
 Click ok and the image build will start (takes a while on the first build). Once that completes, you will be attached to the docker container.
