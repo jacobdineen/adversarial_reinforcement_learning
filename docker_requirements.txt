@@ -1,5 +1,6 @@
 click
 datasets
+gym
 ipython
 matplotlib
 pandas==2.1.1
