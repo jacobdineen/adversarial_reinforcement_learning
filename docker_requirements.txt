@@ -3,6 +3,7 @@ datasets
 gym
 ipython
 matplotlib
+matplotlib
 pandas==2.1.1
 pre-commit==2.21.0
 pytest==7.3.1
