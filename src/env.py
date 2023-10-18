@@ -9,7 +9,7 @@ from torchvision.models import resnet50
 
 
 class ImagePerturbEnv(gym.Env):
-    def __init__(self, image, target_class, budget=10, perturbations_per_step=1):
+    def __init__(self, image: np.ndarray, target_class: int, budget: int = 10, perturbations_per_step: int = 1):
         super().__init__()
 
         # Load a pre-trained ResNet50 classifier
@@ -27,7 +27,7 @@ class ImagePerturbEnv(gym.Env):
         self.perturbations_per_step = perturbations_per_step
         self.perturbed_count = 0
 
-    def step(self, action):
+    def step(self, action: np.ndarray) -> tuple[np.ndarray, int | float, bool, dict]:
         perturbed_image = self.image
         for _ in range(self.perturbations_per_step):
             # Apply perturbation to the image
@@ -35,16 +35,16 @@ class ImagePerturbEnv(gym.Env):
 
         # Convert to PyTorch tensor
         transform = transforms.Compose([transforms.ToTensor()])
-        input_tensor = transform(perturbed_image).unsqueeze(0)
+        input_tensor: torch.Tensor = transform(perturbed_image).unsqueeze(0)
 
         # Get classifier's prediction for the unperturbed image
         with torch.no_grad():
-            original_output = self.model(transform(self.image).unsqueeze(0))
+            original_output: torch.Tensor = self.model(transform(self.image).unsqueeze(0))
             original_prob = F.softmax(original_output, dim=1)[0][self.target_class].item()
 
         # Get classifier's prediction for the perturbed image
         with torch.no_grad():
-            perturbed_output = self.model(input_tensor)
+            perturbed_output: torch.Tensor = self.model(input_tensor)
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
         # Calculate reward as degradation in probability of the correct class
