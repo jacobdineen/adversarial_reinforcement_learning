@@ -37,7 +37,7 @@ class ImagePerturbEnv(gym.Env):
         image_shape (Tuple[int, int, int]): The shape of the image tensor.
     """
 
-    def __init__(self, dataloader: Any, model: torch.nn.Module, attack_budget: int = 1000):
+    def __init__(self, dataloader: Any, model: torch.nn.Module, attack_budget: int = 20):
         """
         Initialize the environment.
 
@@ -48,16 +48,21 @@ class ImagePerturbEnv(gym.Env):
         """
         self.dataloader = iter(dataloader)
         self.model = model
-        self.model.eval()
-
-        self.image, self.target_class = next(self.dataloader)
+        self.model.eval()  # inference mode only for these models
+        self.image, self.target_class = next(self.dataloader)  # start with an image in queue
         self.original_image = self.image.clone()  # Save the original image
         self.image_shape = self.image.shape  # torch.Size([1, 3, 224, 224]) for cifar
-        self.action_space = spaces.Discrete(self.image_shape[1] * self.image_shape[2])
+        total_actions = self.image_shape[1] * self.image_shape[2] * self.image_shape[3]
+        self.action_space = spaces.Discrete(total_actions)
         self.observation_space = spaces.Box(low=0, high=1, shape=self.image_shape, dtype=np.float32)
-
         self.attack_budget = attack_budget
         self.current_attack_count = 0
+
+        logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
+        logging.info(f"Action Space Size: {total_actions}")
+        logging.info(f"Observation Space Shape: {self.observation_space.shape}")
+        logging.info(f"Attack Budget: {self.attack_budget}")
+        logging.info(f"Initial Image Shape: {self.image_shape}")
 
     def step(self, action: int) -> Tuple[torch.Tensor, float, bool, Dict[str, Any]]:
         """
@@ -65,6 +70,8 @@ class ImagePerturbEnv(gym.Env):
 
         Args:
             action: An integer action from the action space.
+            Currently - an action corresponds to shutting an (x,y) coordinate across ALL channels
+            So one step modifies three separate pixels
 
         Returns:
             Tuple: A tuple containing:
@@ -76,10 +83,12 @@ class ImagePerturbEnv(gym.Env):
         self.current_attack_count += 1
 
         perturbed_image = self.image.clone()
-        # This is interesting - this channels a specific x,y coordinate across channels
-        # so this reduce the action space quite a bit
-        x, y = divmod(action, self.image_shape[2])
-        perturbed_image[0, :, x, y] = 0
+
+        channel, temp = divmod(
+            action, self.image_shape[2] * self.image_shape[3]
+        )  # channel, x*y coordinates in the image
+        x, y = divmod(temp, self.image_shape[3])  # x, y coordinates in the image
+        perturbed_image[0, channel, x, y] = 0  # perturb the image by setting the pixel to 0
 
         with torch.no_grad():
             original_output = self.model(self.image)
@@ -112,25 +121,12 @@ class ImagePerturbEnv(gym.Env):
 
 
 if __name__ == "__main__":
-
-    def highlight_changes(original_image: np.ndarray, perturbed_image: np.ndarray) -> np.ndarray:
-        highlighted_image = np.copy(perturbed_image)
-
-        # Find the coordinates where the original and perturbed images differ
-        diff_coords = np.where(np.any(original_image != perturbed_image, axis=-1))
-
-        if diff_coords[0].size == 0:
-            return highlighted_image  # No changes, so return the original perturbed_image
-
-        # Color those pixels red in the highlighted image [255, 0, 0] in RGB
-        highlighted_image[diff_coords] = [255, 0, 0]
-
-        return highlighted_image
+    # This is mainly just for testing
+    # but can likely be lifted for other parts of the codebase
 
     transform_chain = transforms.Compose(
         [
             transforms.Resize((224, 224)),
-            # transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
         ]
     )
@@ -141,53 +137,74 @@ if __name__ == "__main__":
     model = resnet50(pretrained=True)
     env = ImagePerturbEnv(dataloader=dataloader, model=model)
 
-    num_steps = 500
+    num_steps = env.attack_budget - 1
     for _ in range(num_steps):
         original_image = env.image.clone().detach().cpu().numpy().squeeze()
         action = env.action_space.sample()
         next_state, reward, done, _ = env.step(action)
         perturbed_image = next_state.clone().detach().cpu().numpy().squeeze()
-
-        print(f"Reward: {reward}")
         if done:
             env.reset()
 
-    class_labels = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
-
     with torch.no_grad():
-        original_output = env.model(env.original_image)
-        original_prob = F.softmax(original_output, dim=1)[0][env.target_class].item()
+        original_output = model(env.original_image)
+        original_prob, original_class = F.softmax(original_output, dim=1).max(dim=1)
 
-        print(f"Original Model Output: {original_output}")
-        print(f"Original Model Probability: {original_prob}")
+        perturbed_output = model(env.image)
+        perturbed_prob, perturbed_class = F.softmax(perturbed_output, dim=1).max(dim=1)
 
-        perturbed_output = env.model(env.image)
-        perturbed_prob = F.softmax(perturbed_output, dim=1)[0][env.target_class].item()
+        # print(f"Original Model Output: {original_output}")
+        print(f"Original Model class and Probability: {original_class.item()}, {original_prob.item()}")
 
-        print(f"Perturbed Model Output: {perturbed_output}")
-        print(f"Perturbed Model Probability: {perturbed_prob}")
+        # print(f"Perturbed Model Output: {perturbed_output}")
+        print(f"Perturbed Model class and Probability: {perturbed_class.item()}, {perturbed_prob.item()}")
 
-    target_class_label = class_labels[env.target_class]
     original_image = env.original_image.clone().detach().cpu().numpy().squeeze()
     perturbed_image = next_state.clone().detach().cpu().numpy().squeeze()
 
-    # # Find the coordinates of pixels that have changed
-    # changed_pixels = np.where(original_image != perturbed_image)
-    # print(f"Number of pixels changed: {changed_pixels[0].size}")
-    # print('changed pixels: ', changed_pixels)
-    # print('shape', changed_pixels[0][0].shape)
-    # highlighted_image = original_image.copy()  # Create a copy of the original image
-    # # Set only the changed pixels to red
-    # highlighted_image[changed_pixels[0], changed_pixels[1], :] = [255, 0, 0]  # Red
+    changed_pixels = np.where(original_image != perturbed_image)
+    print(f"Number of pixels changed: {len(changed_pixels[0])}")
+    print("Shape of original_image: ", original_image.shape)
+    print("Shape of perturbed_image: ", perturbed_image.shape)
+    print("Length of changed_pixels tuple: ", len(changed_pixels))
+
+    # Since you only have 3 dimensions [channel, height, width]
+    for i in range(len(changed_pixels[0])):
+        channel_idx, x_idx, y_idx = changed_pixels[0][i], changed_pixels[1][i], changed_pixels[2][i]
+        pixel_value = perturbed_image[channel_idx, x_idx, y_idx].item()
+        print(f"Pixel value in perturbed image at ({x_idx}, {y_idx}, channel: {channel_idx}): {pixel_value}")
+
+    original_image_T = np.transpose(original_image, (1, 2, 0))
+    highlighted_isolated = np.zeros_like(original_image_T)
+    for i in range(len(changed_pixels[0])):
+        channel_idx, x_idx, y_idx = changed_pixels[0][i], changed_pixels[1][i], changed_pixels[2][i]
+        # Set the RGB value based on the channel index
+        if channel_idx == 0:
+            highlighted_isolated[x_idx, y_idx, :] = [255, 0, 0]  # Red for channel 0
+        elif channel_idx == 1:
+            highlighted_isolated[x_idx, y_idx, :] = [0, 255, 0]  # Green for channel 1
+        elif channel_idx == 2:
+            highlighted_isolated[x_idx, y_idx, :] = [0, 0, 255]  # Blue for channel 2
 
     plt.figure()
     plt.subplot(1, 3, 1)
-    plt.title(f"Original\nClass: {target_class_label} (Prob: {original_prob:.10f})")
+    plt.title(f"Original (Class: {original_class.item()}, Prob: {original_prob.item():.10f})")
     plt.imshow(np.transpose(original_image, (1, 2, 0)))
 
     plt.subplot(1, 3, 2)
-    plt.title(f"Perturbed\nClass: {target_class_label} (Prob: {perturbed_prob:.10f})")
+    plt.title(f"Perturbed (Class: {perturbed_class.item()}, Prob: {perturbed_prob.item():.10f})")
     plt.imshow(np.transpose(perturbed_image, (1, 2, 0)))
+
+    plt.subplot(1, 3, 3)
+    plt.title("Highlighted Changes")
+    plt.imshow(highlighted_isolated)
+    # Create custom handles for the legend
+    ax = plt.gca()
+    ax.annotate("Channel 0: Red", xy=(1.1, 0.2), xycoords="axes fraction", color="red")
+    ax.annotate("Channel 1: Green", xy=(1.1, 0.3), xycoords="axes fraction", color="green")
+    ax.annotate("Channel 2: Blue", xy=(1.1, 0.4), xycoords="axes fraction", color="blue")
+
+    plt.show()
 
     # plt.subplot(1, 3, 3)
     # plt.title('Highlighted')
