@@ -11,3 +11,5 @@ frontend/build
 *.pyc
 /__pycache__/
 /data
+*/adv_rl.egg-info
+adv_rl.egg-info/
