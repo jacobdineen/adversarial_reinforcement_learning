@@ -37,7 +37,7 @@ class ImagePerturbEnv(gym.Env):
         image_shape (Tuple[int, int, int]): The shape of the image tensor.
     """
 
-    def __init__(self, dataloader: Any, model: torch.nn.Module, attack_budget: int = 20):
+    def __init__(self, dataloader: Any, model: torch.nn.Module, attack_budget: int = 20, lambda_: float = 1.0):
         """
         Initialize the environment.
 
@@ -45,6 +45,7 @@ class ImagePerturbEnv(gym.Env):
             dataloader: PyTorch DataLoader iterator.
             model: The deep learning model to evaluate against.
             attack_budget: The number of steps available to perturb the image.
+            lambda_: hyperparameter that controls how severely we penalize non-sparse solutions. A higher LAMBDA means a steeper penalty.
         """
         self.dataloader = iter(dataloader)
         self.model = model
@@ -56,6 +57,7 @@ class ImagePerturbEnv(gym.Env):
         self.action_space = spaces.Discrete(total_actions)
         self.observation_space = spaces.Box(low=0, high=1, shape=self.image_shape, dtype=np.float32)
         self.attack_budget = attack_budget
+        self.lambda_ = lambda_
         self.current_attack_count = 0
 
         logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
@@ -90,14 +92,7 @@ class ImagePerturbEnv(gym.Env):
         x, y = divmod(temp, self.image_shape[3])  # x, y coordinates in the image
         perturbed_image[0, channel, x, y] = 0  # perturb the image by setting the pixel to 0
 
-        with torch.no_grad():
-            original_output = self.model(self.image)
-            original_prob = F.softmax(original_output, dim=1)[0][self.target_class].item()
-
-            perturbed_output = self.model(perturbed_image)
-            perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
-
-        reward = original_prob - perturbed_prob  # degradation in the probability of the target class
+        reward = self.compute_reward(self.image, perturbed_image)
 
         done = self.current_attack_count >= self.attack_budget  # continue until attack budget reached
         if done:
@@ -107,6 +102,28 @@ class ImagePerturbEnv(gym.Env):
         self.image = perturbed_image
 
         return perturbed_image, reward, done, {}
+
+    def compute_reward(self, original_image: torch.Tensor, perturbed_image: torch.Tensor) -> float:
+        """_summary_
+
+        Args:
+            original_image (torch.Tensor): og image
+            perturbed_image (torch.Tensor): perturbed_image
+
+        Returns:
+            float: reward for step
+        """
+        with torch.no_grad():
+            original_output = self.model(original_image)
+            original_prob = F.softmax(original_output, dim=1)[0][self.target_class].item()
+
+            perturbed_output = self.model(perturbed_image)
+            perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
+
+        sparsity = torch.nonzero(perturbed_image - original_image).size(0)
+        reward = (original_prob - perturbed_prob) * np.exp(-self.lambda_ * sparsity)
+
+        return reward
 
     def reset(self) -> torch.Tensor:
         """
