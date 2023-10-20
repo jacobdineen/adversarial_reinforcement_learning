@@ -1,6 +1,8 @@
 click
 datasets
+gym
 ipython
+matplotlib
 matplotlib
 pandas==2.1.1
 pre-commit==2.21.0
