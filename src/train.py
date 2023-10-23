@@ -25,35 +25,60 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class QNetwork(nn.Module):
     def __init__(self, output_dim):
         super().__init__()
-        # Conv Layers
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # Note the '3' instead of '1'
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
 
-        # Compute the output shape after convolutions to dynamically set Linear layer sizes
+        self.model = load_model()
+        # Remove the last fully connected layer (classification head)
+        self.features = nn.Sequential(*list(self.model.children())[:-1])
 
-        # Fully Connected Layers
-        self.fc1 = nn.Linear(36864, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, 64)
-        self.fc5 = nn.Linear(64, output_dim)
-
-    def _forward_conv(self, x):
-        x = x.squeeze(1)  # Remove the extra dimension
-        x = nn.functional.relu(self.conv1(x))
-        x = nn.functional.relu(self.conv2(x))
-        x = nn.functional.relu(self.conv3(x))
-        return x
+        # Add your new fully connected layer
+        self.final_fc = nn.Linear(512, output_dim).to(DEVICE)
 
     def forward(self, x):
-        x = self._forward_conv(x)
-        x = x.view(x.size(0), -1)  # Flatten the tensor
-        x = nn.functional.relu(self.fc1(x))
-        x = nn.functional.relu(self.fc2(x))
-        x = nn.functional.relu(self.fc3(x))
-        x = nn.functional.relu(self.fc4(x))
-        return self.fc5(x)
+        x = x.squeeze(1)  # Remove the extra dimension if needed
+        x = self.features(x)  # Pass through pre-trained layers
+
+        # Global average pooling
+        x = x.mean([2, 3])
+
+        # Pass through your new fully connected layer
+        x = self.final_fc(x)
+
+        return x
+
+
+# # Q-Network Definition
+# class QNetwork(nn.Module):
+#     def __init__(self, output_dim):
+#         super().__init__()
+#         # Conv Layers
+#         self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # Note the '3' instead of '1'
+#         self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+#         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
+
+#         # Compute the output shape after convolutions to dynamically set Linear layer sizes
+
+#         # Fully Connected Layers
+#         self.fc1 = nn.Linear(36864, 128)
+#         self.fc2 = nn.Linear(128, 128)
+#         self.fc3 = nn.Linear(128, 64)
+#         self.fc4 = nn.Linear(64, 64)
+#         self.fc5 = nn.Linear(64, output_dim)
+
+#     def _forward_conv(self, x):
+#         x = x.squeeze(1)  # Remove the extra dimension
+#         x = nn.functional.relu(self.conv1(x))
+#         x = nn.functional.relu(self.conv2(x))
+#         x = nn.functional.relu(self.conv3(x))
+#         return x
+
+#     def forward(self, x):
+#         x = self._forward_conv(x)
+#         x = x.view(x.size(0), -1)  # Flatten the tensor
+#         x = nn.functional.relu(self.fc1(x))
+#         x = nn.functional.relu(self.fc2(x))
+#         x = nn.functional.relu(self.fc3(x))
+#         x = nn.functional.relu(self.fc4(x))
+#         return self.fc5(x)
 
 
 # Epsilon-Greedy Policy
@@ -99,7 +124,6 @@ def train(
     episode_rewards = []
 
     for episode in tqdm(range(num_episodes)):
-        logging.info("epsilon: " + str(epsilon))
         state = env.reset()
         done = False
         episode_reward = 0
@@ -138,7 +162,7 @@ def train(
                 loss.backward()
                 optimizer.step()
         # logging.info(f"Episode {episode}: Total Reward: {episode_reward}")
-        print(actions_taken)
+        # print(actions_taken)
         episode_rewards.append(episode_reward)
 
         if episode % update_freq == 0:
@@ -153,10 +177,10 @@ if __name__ == "__main__":
     learning_rate = 10e-3  # learning rate for optimizer
     attack_budget = 50  # max number of perturbations (len(channel) pixel changes each attack)
     reward_lambda = 1
-    batch_size = 256  # sample 64 experiences from the replay buffer every time
+    batch_size = 128  # sample 64 experiences from the replay buffer every time
     gamma = 0.95  # discount factor
     epsilon = 0.9  # start with 50% exploration
-    update_freq = 1  # update epsilon every 100 episodes
+    update_freq = 5  # update epsilon every 100 episodes
     decay = 0.99  # decay rate for epsilon
 
     # cifar10 dataloader
