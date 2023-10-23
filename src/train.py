@@ -57,20 +57,24 @@ class QNetwork(nn.Module):
 
 
 # Epsilon-Greedy Policy
-def policy(state, epsilon, q_net, env) -> int:
+def policy(state, epsilon, q_net, env, actions_taken) -> int:
     """
     With probability epsilon, return the index of a random action.
     Otherwise, return the index of the action that maximizes the Q-value.
     """
-    action_index: int = None
     if random.random() < epsilon:
-        action_index = env.action_space.sample()
+        action_index = random.choice([a for a in range(env.action_space.n) if a not in actions_taken])
     else:
         with torch.no_grad():
             state = state.unsqueeze(0)
-            q_values = q_net(state)
-        action_index = q_values.max(1)[1].item()
-    return action_index
+            q_values = q_net(state).squeeze()
+            # Convert actions_taken set to tensor for indexing
+            actions_taken_tensor = torch.tensor(list(actions_taken), dtype=torch.long)
+            q_values[actions_taken_tensor] = float("-inf")
+            action_index = q_values.argmax().item()
+
+    actions_taken.add(action_index)
+    return action_index, actions_taken
 
 
 def train(
@@ -97,9 +101,11 @@ def train(
         done = False
         episode_reward = 0
 
+        actions_taken = set()
+
         while not done:
             # Environment Interaction
-            action = policy(state, epsilon, q_net, env)
+            action, actions_taken = policy(state, epsilon, q_net, env, actions_taken)
             next_state, reward, done, _ = env.step(action)
 
             # Store Experience
@@ -141,12 +147,12 @@ def train(
 
 if __name__ == "__main__":
     num_episodes = 100  # number of episodes to train for
-    learning_rate = 10e-2  # learning rate for optimizer
-    attack_budget = 100  # max number of perturbations
+    learning_rate = 10e-3  # learning rate for optimizer
+    attack_budget = 10  # max number of perturbations (len(channel) pixel changes each attack)
     reward_lambda = 1
     batch_size = 256  # sample 64 experiences from the replay buffer every time
     gamma = 0.95  # discount factor
-    epsilon = 0.5  # start with 50% exploration
+    epsilon = 0.1  # start with 50% exploration
     update_freq = 1  # update epsilon every 100 episodes
     decay = 0.99  # decay rate for epsilon
 
