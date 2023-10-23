@@ -15,8 +15,28 @@ pip install -r docker_requirements.txt
 pip install -e .  # install this module in editable mode
 ```
 
-# docker
 
+# Common commands
+```python
+# train resnet on cifar 10
+python src/Resnet_18_train.py
+
+# testing inference on trained resnet model
+python src/Resnet_18_inference.py
+
+# dry run of env
+python src/env.py
+
+
+# train rl agent
+python src/train.py
+
+
+```
+
+
+
+# docker
 
 ```bash
 sudo docker build -t adv_rl -f Dockerfile .
