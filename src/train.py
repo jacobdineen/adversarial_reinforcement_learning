@@ -5,7 +5,6 @@ import random
 from collections import deque
 
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
 from torch import nn, optim
 from tqdm import tqdm
@@ -24,16 +23,32 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Q-Network Definition
 class QNetwork(nn.Module):
-    def __init__(self, input_shape, output_dim):
+    def __init__(self, output_dim):
         super().__init__()
-        self.fc1 = nn.Linear(np.prod(input_shape), 128)
+        # Conv Layers
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # Note the '3' instead of '1'
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
+
+        # Compute the output shape after convolutions to dynamically set Linear layer sizes
+
+        # Fully Connected Layers
+        self.fc1 = nn.Linear(36864, 128)
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, 64)
         self.fc4 = nn.Linear(64, 64)
         self.fc5 = nn.Linear(64, output_dim)
 
+    def _forward_conv(self, x):
+        x = x.squeeze(1)  # Remove the extra dimension
+        x = nn.functional.relu(self.conv1(x))
+        x = nn.functional.relu(self.conv2(x))
+        x = nn.functional.relu(self.conv3(x))
+        return x
+
     def forward(self, x):
-        x = x.view(x.size(0), -1)
+        x = self._forward_conv(x)
+        x = x.view(x.size(0), -1)  # Flatten the tensor
         x = nn.functional.relu(self.fc1(x))
         x = nn.functional.relu(self.fc2(x))
         x = nn.functional.relu(self.fc3(x))
@@ -62,19 +77,13 @@ def train(env: ImagePerturbEnv, q_net: QNetwork, optimizer: optim.Optimizer, num
     """
     Creates an environment from the dataloader and model and trains a Q-Network - returns the trained Q-Network.
     """
-    input_shape = env.observation_space.shape
-    n_actions = env.action_space.n
-
-    # Initialize Q-Network and Optimizer
-    q_net = QNetwork(input_shape, n_actions).to(DEVICE)
-    optimizer = optim.Adam(q_net.parameters(), lr=0.001)
 
     # Initialize Replay Buffer and Other Training Parameters
     buffer: deque[tuple[torch.Tensor, int, float, torch.Tensor, bool]] = deque(maxlen=10000)
-    batch_size = 64
-    gamma = 0.99
-    epsilon = 0.1
-    update_freq = 1
+    batch_size = 256  # sample 64 experiences from the replay buffer every time
+    gamma = 0.5  # discount factor
+    epsilon = 0.1  # start with 10% exploration
+    update_freq = 1  # update epsilon every 100 episodes
 
     episode_rewards = []
 
@@ -135,11 +144,15 @@ if __name__ == "__main__":
     )  # lambda_ used in reward to penalize more changes
 
     # Initialize Q-Network and Optimizer here, and pass them to train
-    input_shape = env.observation_space.shape
+    # input_shape = env.observation_space.shape
     n_actions = env.action_space.n
-    q_net = QNetwork(input_shape, n_actions).to(DEVICE)
-    optimizer = optim.Adam(q_net.parameters(), lr=0.001)
-    num_episodes = 500
+    q_net = QNetwork(n_actions).to(DEVICE)
+
+    learning_rate = 10e-3
+    optimizer = optim.Adam(q_net.parameters(), lr=learning_rate)
+
+    num_episodes = 5000
+    logging.info(f"Starting Training with num_episodes = {num_episodes}")
     trained_qnet, episode_rewards = train(env, q_net, optimizer, num_episodes)
     print(episode_rewards)
 
