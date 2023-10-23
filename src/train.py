@@ -61,6 +61,8 @@ def policy(state, epsilon, q_net, env, actions_taken) -> int:
     """
     With probability epsilon, return the index of a random action.
     Otherwise, return the index of the action that maximizes the Q-value.
+
+    If an action (pixel) is already selected, don't select it again
     """
     if random.random() < epsilon:
         action_index = random.choice([a for a in range(env.action_space.n) if a not in actions_taken])
@@ -97,6 +99,7 @@ def train(
     episode_rewards = []
 
     for episode in tqdm(range(num_episodes)):
+        logging.info("epsilon: " + str(epsilon))
         state = env.reset()
         done = False
         episode_reward = 0
@@ -135,7 +138,7 @@ def train(
                 loss.backward()
                 optimizer.step()
         # logging.info(f"Episode {episode}: Total Reward: {episode_reward}")
-
+        print(actions_taken)
         episode_rewards.append(episode_reward)
 
         if episode % update_freq == 0:
@@ -148,11 +151,11 @@ def train(
 if __name__ == "__main__":
     num_episodes = 100  # number of episodes to train for
     learning_rate = 10e-3  # learning rate for optimizer
-    attack_budget = 10  # max number of perturbations (len(channel) pixel changes each attack)
+    attack_budget = 50  # max number of perturbations (len(channel) pixel changes each attack)
     reward_lambda = 1
     batch_size = 256  # sample 64 experiences from the replay buffer every time
     gamma = 0.95  # discount factor
-    epsilon = 0.1  # start with 50% exploration
+    epsilon = 0.9  # start with 50% exploration
     update_freq = 1  # update epsilon every 100 episodes
     decay = 0.99  # decay rate for epsilon
 
