@@ -19,7 +19,7 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # Resnet on Cifar10
 def load_model():
     model = ResNet(ResidualBlock, [3, 4, 6, 3]).to(DEVICE)
-    model.load_state_dict(torch.load("src/model_weights/resnet_cifar-10.pth"))
+    model.load_state_dict(torch.load("src/model_weights/resnet_cifar-10.pth", map_location=DEVICE))
     logging.info(f"Resnet model loaded successfully on device: {DEVICE}")
     return model
 
