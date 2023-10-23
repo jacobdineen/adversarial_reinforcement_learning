@@ -136,6 +136,8 @@ class ImagePerturbEnv(gym.Env):
         self.original_image = self.image.clone()  # Save the original image again
         self.current_attack_count = 0
 
+        return self.image
+
 
 if __name__ == "__main__":
     # This is mainly just for testing

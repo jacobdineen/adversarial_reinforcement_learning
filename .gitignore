@@ -12,3 +12,4 @@ frontend/build
 /__pycache__/
 /data
 adv_rl.egg-info
+src/model_weights/trained_qnet.pth
