@@ -3,6 +3,7 @@
 import logging
 import random
 from collections import deque
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import torch
@@ -91,12 +92,12 @@ class QNetwork(nn.Module):
 # Epsilon-Greedy Policy
 
 
-def policy(state, epsilon, q_net, actions_taken) -> int:
+def policy(state, epsilon, q_net1, q_net2, actions_taken) -> int:
     """
     With probability epsilon, return the index of a random action.
-    Otherwise, return the index of the action that maximizes the Q-value.
+    Otherwise, return the index of the action that maximizes the average Q-value from both networks.
 
-    If an action (pixel) is already selected, don't select it again
+    If an action (pixel) is already selected, don't select it again.
     """
     if torch.rand(1).item() < epsilon:
         available_actions = torch.tensor([a for a in range(n_actions) if a not in actions_taken], dtype=torch.long)
@@ -104,32 +105,36 @@ def policy(state, epsilon, q_net, actions_taken) -> int:
     else:
         with torch.no_grad():
             state = state.unsqueeze(0)
-            q_values = q_net(state).squeeze()
+            q_values1 = q_net1(state).squeeze()
+            q_values2 = q_net2(state).squeeze()
+            avg_q_values = (q_values1 + q_values2) / 2  # Average the Q-values
+
             # Convert actions_taken set to tensor for indexing
             actions_taken_tensor = torch.tensor(list(actions_taken), dtype=torch.long)
-            q_values[actions_taken_tensor] = float("-inf")
-            action_index = q_values.argmax().item()
+            avg_q_values[actions_taken_tensor] = float("-inf")
+            action_index = avg_q_values.argmax().item()
 
     actions_taken.add(action_index)
     return action_index, actions_taken
 
 
+# double q learning
+# one network chooses the action, the other evaluates the action
+# the network that chooses the action is updated less frequently
+# than the network that evaluates the action
 def train(
     env: ImagePerturbEnv,
-    q_net: QNetwork,
-    optimizer: optim.Optimizer,
+    q_net1: QNetwork,
+    q_net2: QNetwork,
+    optimizer1: optim.Optimizer,
+    optimizer2: optim.Optimizer,
     num_episodes: int = 100,
     epsilon: float = 0.1,
     gamma: float = 0.95,
     update_freq: int = 1,
     batch_size: int = 256,
     decay: float = 0.99,
-) -> QNetwork:
-    """
-    Creates an environment from the dataloader and model and trains a Q-Network - returns the trained Q-Network.
-    """
-
-    # Initialize Replay Buffer and Other Training Parameters
+) -> Tuple[QNetwork, QNetwork, List[float]]:
     buffer: deque[tuple[torch.Tensor, int, float, torch.Tensor, bool]] = deque(maxlen=10000)
     episode_rewards = []
 
@@ -137,49 +142,50 @@ def train(
         state = env.reset()
         done = False
         episode_reward = 0
-
         actions_taken = set()
 
         while not done:
-            # Environment Interaction
-            action, actions_taken = policy(state, epsilon, q_net, actions_taken)
+            action, actions_taken = policy(state, epsilon, q_net1, q_net2, actions_taken)
             next_state, reward, done, _ = env.step(action)
-
-            # Store Experience
             buffer.append((state, action, reward, next_state, done))
-
             state = next_state
             episode_reward += reward
 
-            # Update Network
             if len(buffer) >= batch_size:
                 batch = random.sample(buffer, batch_size)
                 states, actions, rewards, next_states, dones = zip(*batch)
-
-                states = torch.stack(states, dim=0).to(DEVICE)
+                states = torch.stack(states).to(DEVICE)
                 actions = torch.LongTensor(actions).to(DEVICE)
                 rewards = torch.FloatTensor(rewards).to(DEVICE)
-                next_states = torch.stack(next_states, dim=0).to(DEVICE)
+                next_states = torch.stack(next_states).to(DEVICE)
                 dones = torch.FloatTensor(dones).to(DEVICE)
 
-                curr_Q = q_net(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
-                next_Q = q_net(next_states).max(1)[0]
+                curr_Q1 = q_net1(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
+                curr_Q2 = q_net2(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
+
+                next_actions = q_net1(next_states).argmax(1)
+                next_Q = q_net2(next_states).gather(1, next_actions.unsqueeze(-1)).squeeze(-1)
+
                 target_Q = rewards + (gamma * next_Q) * (1 - dones)
-                # huber loss
-                # less sensitive to outliers
-                loss = nn.functional.smooth_l1_loss(curr_Q, target_Q.detach())
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-        # logging.info(f"Episode {episode}: Total Reward: {episode_reward}")
-        # print(actions_taken)
+
+                loss1 = nn.functional.smooth_l1_loss(curr_Q1, target_Q.detach())
+                loss2 = nn.functional.smooth_l1_loss(curr_Q2, target_Q.detach())
+
+                optimizer1.zero_grad()
+                loss1.backward()
+                optimizer1.step()
+
+                optimizer2.zero_grad()
+                loss2.backward()
+                optimizer2.step()
+
         episode_rewards.append(episode_reward)
 
         if episode % update_freq == 0:
             epsilon *= decay
 
     logging.info(f"Completed Training")
-    return q_net, episode_rewards
+    return q_net1, q_net2, episode_rewards
 
 
 if __name__ == "__main__":
@@ -205,14 +211,35 @@ if __name__ == "__main__":
     n_actions = env.action_space.n
 
     # QNetwork, QNetworkPretrainedResnet
-    q_net = QNetwork(n_actions).to(DEVICE)
-    optimizer = optim.Adam(q_net.parameters(), lr=learning_rate)
+    q_net1 = QNetwork(n_actions).to(DEVICE)
+    q_net2 = QNetwork(n_actions).to(DEVICE)
+    optimizer1 = optim.Adam(q_net1.parameters(), lr=learning_rate)
+    optimizer2 = optim.Adam(q_net2.parameters(), lr=learning_rate)
 
-    logging.info(f"Starting Training with num_episodes = {num_episodes}")
-    trained_qnet, episode_rewards = train(
+    logging.info(
+        f"Training Initialization:\n"
+        f"  - Hyperparameters:\n"
+        f"    • num_episodes: {num_episodes}\n"
+        f"    • learning_rate: {learning_rate}\n"
+        f"    • attack_budget: {attack_budget}\n"
+        f"    • reward_lambda: {reward_lambda}\n"
+        f"    • batch_size: {batch_size}\n"
+        f"    • gamma: {gamma}\n"
+        f"    • initial_epsilon: {epsilon}\n"
+        f"    • update_freq: {update_freq}\n"
+        f"    • decay: {decay}\n"
+        f"  - Environment Details:\n"
+        f"    • Action Space: {env.action_space}\n"
+        f"    • Observation Space: {env.observation_space}\n"
+        f"  - Starting Training with num_episodes: {num_episodes}"
+    )
+
+    trained_qnet1, trained_qnet2, episode_rewards = train(
         env,
-        q_net,
-        optimizer,
+        q_net1,
+        q_net2,
+        optimizer1,
+        optimizer2,
         num_episodes,
         epsilon,
         gamma,
@@ -230,6 +257,8 @@ if __name__ == "__main__":
     plt.show()
 
     # Save the trained Q-Network
-    SAVE_PATH = "src/model_weights/trained_qnet.pth"
-    torch.save(trained_qnet.state_dict(), SAVE_PATH)
-    logging.info(f"Trained Q-Network saved successfully to {SAVE_PATH}")
+    SAVE_PATH = "src/model_weights/trained_qnets.pth"
+
+    torch.save({"q_net1": trained_qnet1.state_dict(), "q_net2": trained_qnet2.state_dict()}, SAVE_PATH)
+
+    logging.info(f"Trained Q-Networks saved successfully to {SAVE_PATH}")
