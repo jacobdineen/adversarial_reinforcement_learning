@@ -15,14 +15,20 @@ from src.utils import get_cifar_dataloader, load_model
 logging.basicConfig(level=logging.INFO)
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+# Set random seed for reproducibility
+SEED = 42
+random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 # An episode is a sequence of perturbations on the same image until
 # attack budget is reached. The reward is the change in the model's
 # confidence in the true class of the image.
 
 
-# Q-Network Definition
-class QNetwork(nn.Module):
+# fine tunes our pretrained resnet as a Q-network
+class QNetworkPretrainedResnet(nn.Module):
     def __init__(self, output_dim):
         super().__init__()
 
@@ -34,6 +40,7 @@ class QNetwork(nn.Module):
         self.final_fc = nn.Linear(512, output_dim).to(DEVICE)
 
     def forward(self, x):
+        x = x.to(DEVICE)  # Move to device and convert to half precision
         x = x.squeeze(1)  # Remove the extra dimension if needed
         x = self.features(x)  # Pass through pre-trained layers
 
@@ -46,51 +53,54 @@ class QNetwork(nn.Module):
         return x
 
 
-# # Q-Network Definition
-# class QNetwork(nn.Module):
-#     def __init__(self, output_dim):
-#         super().__init__()
-#         # Conv Layers
-#         self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # Note the '3' instead of '1'
-#         self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-#         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
+# from scratch qnet training with conv layers
+class QNetwork(nn.Module):
+    def __init__(self, output_dim):
+        super().__init__()
+        # Conv Layers
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=8, stride=4)  # Note the '3' instead of '1'
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
 
-#         # Compute the output shape after convolutions to dynamically set Linear layer sizes
+        # Compute the output shape after convolutions to dynamically set Linear layer sizes
 
-#         # Fully Connected Layers
-#         self.fc1 = nn.Linear(36864, 128)
-#         self.fc2 = nn.Linear(128, 128)
-#         self.fc3 = nn.Linear(128, 64)
-#         self.fc4 = nn.Linear(64, 64)
-#         self.fc5 = nn.Linear(64, output_dim)
+        # Fully Connected Layers
+        self.fc1 = nn.Linear(36864, 128)
+        self.fc2 = nn.Linear(128, 128)
+        self.fc3 = nn.Linear(128, 64)
+        self.fc4 = nn.Linear(64, 64)
+        self.fc5 = nn.Linear(64, output_dim)
 
-#     def _forward_conv(self, x):
-#         x = x.squeeze(1)  # Remove the extra dimension
-#         x = nn.functional.relu(self.conv1(x))
-#         x = nn.functional.relu(self.conv2(x))
-#         x = nn.functional.relu(self.conv3(x))
-#         return x
+    def _forward_conv(self, x):
+        x = x.squeeze(1)  # Remove the extra dimension
+        x = nn.functional.relu(self.conv1(x))
+        x = nn.functional.relu(self.conv2(x))
+        x = nn.functional.relu(self.conv3(x))
+        return x
 
-#     def forward(self, x):
-#         x = self._forward_conv(x)
-#         x = x.view(x.size(0), -1)  # Flatten the tensor
-#         x = nn.functional.relu(self.fc1(x))
-#         x = nn.functional.relu(self.fc2(x))
-#         x = nn.functional.relu(self.fc3(x))
-#         x = nn.functional.relu(self.fc4(x))
-#         return self.fc5(x)
+    def forward(self, x):
+        x = self._forward_conv(x)
+        x = x.view(x.size(0), -1)  # Flatten the tensor
+        x = nn.functional.relu(self.fc1(x))
+        x = nn.functional.relu(self.fc2(x))
+        x = nn.functional.relu(self.fc3(x))
+        x = nn.functional.relu(self.fc4(x))
+        return self.fc5(x)
 
 
 # Epsilon-Greedy Policy
-def policy(state, epsilon, q_net, env, actions_taken) -> int:
+
+
+def policy(state, epsilon, q_net, actions_taken) -> int:
     """
     With probability epsilon, return the index of a random action.
     Otherwise, return the index of the action that maximizes the Q-value.
 
     If an action (pixel) is already selected, don't select it again
     """
-    if random.random() < epsilon:
-        action_index = random.choice([a for a in range(env.action_space.n) if a not in actions_taken])
+    if torch.rand(1).item() < epsilon:
+        available_actions = torch.tensor([a for a in range(n_actions) if a not in actions_taken], dtype=torch.long)
+        action_index = available_actions[torch.randint(0, len(available_actions), (1,))].item()
     else:
         with torch.no_grad():
             state = state.unsqueeze(0)
@@ -132,7 +142,7 @@ def train(
 
         while not done:
             # Environment Interaction
-            action, actions_taken = policy(state, epsilon, q_net, env, actions_taken)
+            action, actions_taken = policy(state, epsilon, q_net, actions_taken)
             next_state, reward, done, _ = env.step(action)
 
             # Store Experience
@@ -193,6 +203,8 @@ if __name__ == "__main__":
     # Initialize Q-Network and Optimizer here, and pass them to train
     # input_shape = env.observation_space.shape
     n_actions = env.action_space.n
+
+    # QNetwork, QNetworkPretrainedResnet
     q_net = QNetwork(n_actions).to(DEVICE)
     optimizer = optim.Adam(q_net.parameters(), lr=learning_rate)
 

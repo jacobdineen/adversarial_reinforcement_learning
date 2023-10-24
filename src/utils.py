@@ -5,6 +5,7 @@ Various utility funcs housed here
 import logging
 
 import torch
+from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
@@ -35,3 +36,14 @@ def get_cifar_dataloader():
     dataset = CIFAR10(root="./data", train=True, download=True, transform=transform_chain)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
     return dataloader
+
+
+# Image Preprocessing
+def preprocess_image(image_path):
+    img = Image.open(image_path)
+    transform_img = transforms.Compose(
+        [transforms.Resize(224), transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+    )
+    img.show()
+    input_image_tensor = transform_img(img).unsqueeze(0)
+    return input_image_tensor, img

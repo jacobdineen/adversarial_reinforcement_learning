@@ -2,30 +2,12 @@
 # Import Libraries
 import matplotlib.pyplot as plt
 import torch
-from PIL import Image
-from torchvision import transforms
 
 # from src.classifiers import ResidualBlock, ResNet
-from src.utils import load_model
+from src.utils import load_model, preprocess_image
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-# Configuration Setup
-def config_setup():
-    classes = ("plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
-    return DEVICE, classes
-
-
-# Image Preprocessing
-def preprocess_image(image_path):
-    img = Image.open(image_path)
-    transform_img = transforms.Compose(
-        [transforms.Resize(224), transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
-    )
-    img.show()
-    input_image_tensor = transform_img(img).unsqueeze(0)
-    return input_image_tensor, img
+CLASSES = ("plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
 
 
 # Inference
@@ -39,11 +21,10 @@ def score(model, input_image_tensor, classes):
 
 # Main Function
 def main():
-    _, classes = config_setup()
     model = load_model()
     image_path = "/home/src/images/resnet_cat.jpg"
     input_image_tensor, img = preprocess_image(image_path)
-    prediction = score(model, input_image_tensor, classes)
+    prediction = score(model, input_image_tensor, CLASSES)
     plt.imshow(img)
     plt.title(f"Predicted class: {prediction}")
     plt.show()

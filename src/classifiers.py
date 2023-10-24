@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
+import torch
 from torch import nn
+
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class ResidualBlock(nn.Module):
