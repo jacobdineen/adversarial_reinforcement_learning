@@ -19,6 +19,8 @@ from torchvision.models import resnet50
 
 logging.basicConfig(level=logging.INFO)
 
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 class ImagePerturbEnv(gym.Env):
     """
@@ -47,10 +49,13 @@ class ImagePerturbEnv(gym.Env):
             attack_budget: The number of steps available to perturb the image.
             lambda_: hyperparameter that controls how severely we penalize non-sparse solutions. A higher LAMBDA means a steeper penalty.
         """
+        logging.info("env device: {}".format(DEVICE))
         self.dataloader = iter(dataloader)
-        self.model = model
-        self.model.eval()  # inference mode only for these models
-        self.image, self.target_class = next(self.dataloader)  # start with an image in queue
+        self.model = model.to(DEVICE)
+        self.model.eval()
+        self.image, self.target_class = next(self.dataloader)
+        self.image = self.image.to(DEVICE)
+        self.target_class = self.target_class.to(DEVICE)
         self.original_image = self.image.clone()  # Save the original image
         self.image_shape = self.image.shape  # torch.Size([1, 3, 224, 224]) for cifar
         total_actions = self.image_shape[1] * self.image_shape[2] * self.image_shape[3]
@@ -83,8 +88,7 @@ class ImagePerturbEnv(gym.Env):
                 - info: Additional information (empty in this case)
         """
         self.current_attack_count += 1
-
-        perturbed_image = self.image.clone()
+        perturbed_image = self.image.clone().to(DEVICE)
 
         channel, temp = divmod(
             action, self.image_shape[2] * self.image_shape[3]
@@ -96,7 +100,7 @@ class ImagePerturbEnv(gym.Env):
 
         done = self.current_attack_count >= self.attack_budget  # continue until attack budget reached
         if done:
-            logging.info("attack budget reached. Sampling new image")
+            # logging.info("attack budget reached. Sampling new image")
             self.reset()
 
         self.image = perturbed_image
@@ -113,6 +117,8 @@ class ImagePerturbEnv(gym.Env):
         Returns:
             float: reward for step
         """
+        original_image = original_image.to(DEVICE)
+        perturbed_image = perturbed_image.to(DEVICE)
         with torch.no_grad():
             original_output = self.model(original_image)
             original_prob = F.softmax(original_output, dim=1)[0][self.target_class].item()
@@ -120,8 +126,8 @@ class ImagePerturbEnv(gym.Env):
             perturbed_output = self.model(perturbed_image)
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
-        sparsity = torch.nonzero(perturbed_image - original_image).size(0)
-        reward = (original_prob - perturbed_prob) * np.exp(-self.lambda_ * sparsity)
+        # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
+        reward = original_prob - perturbed_prob  # * np.exp(-self.lambda_ * sparsity)
 
         return reward
 
@@ -133,6 +139,8 @@ class ImagePerturbEnv(gym.Env):
             The new state (image) after resetting.
         """
         self.image, self.target_class = next(self.dataloader)
+        self.image = self.image.to(DEVICE)
+        self.target_class = self.target_class.to(DEVICE)
         self.original_image = self.image.clone()  # Save the original image again
         self.current_attack_count = 0
 
