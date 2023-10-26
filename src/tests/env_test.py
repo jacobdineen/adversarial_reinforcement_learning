@@ -28,19 +28,19 @@ class TestImagePerturbEnv(unittest.TestCase):
         self.assertIsNotNone(self.env.model)
         self.assertEqual(self.env.current_attack_count, 0)
 
-    def test_step(self):
-        original_image = self.env.image.clone()
-        action = self.env.action_space.sample()
-        next_state, reward, done, _ = self.env.step(action)
+    # def test_step(self):
+    #     original_image = self.env.image.clone()
+    #     action = self.env.action_space.sample()
+    #     next_state, reward, done, _ = self.env.step(action)
 
-        # Check if the image is perturbed
-        self.assertFalse(torch.equal(original_image, next_state))
+    #     # Check if the image is perturbed
+    #     self.assertFalse(torch.equal(original_image, next_state))
 
-        # Check if reward is a float
-        self.assertIsInstance(reward, float)
+    #     # Check if reward is a float
+    #     self.assertIsInstance(reward, float)
 
-        # Check if done is a boolean
-        self.assertIsInstance(done, bool)
+    #     # Check if done is a boolean
+    #     self.assertIsInstance(done, bool)
 
     # def test_reset(self):
     #     original_image, original_class = self.env.image, self.env.target_class

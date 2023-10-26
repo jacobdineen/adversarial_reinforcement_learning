@@ -141,12 +141,12 @@ def train(
 
     # each episode is a single image
     for episode in tqdm(range(num_episodes)):
-        logging.info(f"Starting episode {episode}")
+        # logging.info(f"Starting episode {episode}")
         aggregated_episode_reward = 0  # Reset aggregated reward counter for the episode
         # that image can be sampled a number of times consecutively
         # with such a large action space, maybe it helps to see image multiple times to learn
         for i in range(env.num_times_to_sample + 1):
-            logging.info(f"Using image {env.image_counter}")
+            # logging.info(f"Using image {env.image_counter}")
             state = env.reset()
             done = False
             episode_reward = 0
@@ -191,13 +191,13 @@ def train(
                     # logging.info("attack budget reached. Sampling new image")
                     env.reset()
 
-                logging.info(f"Episode {episode} image sample {i} reward: {episode_reward}")
+                # logging.info(f"Episode {episode} image sample {i} reward: {episode_reward}")
                 aggregated_episode_reward += episode_reward  # Aggregate the reward for this episode
-            logging.info("reached done state")
-            all_actions_taken.append(actions_taken.copy())
+            # logging.info("reached done state")
+        all_actions_taken.append(actions_taken.copy())
 
         episode_scalar_rewards.append(aggregated_episode_reward)  # Append the aggregated reward for this episode
-        print("rewards", episode_scalar_rewards)
+        # logging.info("rewards", episode_scalar_rewards)
         if episode % update_freq == 0:
             epsilon *= decay
 
@@ -209,12 +209,12 @@ if __name__ == "__main__":
     num_episodes = 100  # number of episodes to train for
     learning_rate = 10e-3  # learning rate for optimizer
     attack_budget = 50  # max number of perturbations (len(channel) pixel changes each attack)
-    num_times_to_sample = 40  # number of times to sample each image consecutively before sampling new image
+    num_times_to_sample = 2  # number of times to sample each image consecutively before sampling new image
     reward_lambda = 1
-    batch_size = 128  # sample 64 experiences from the replay buffer every time
+    batch_size = 512  # sample 64 experiences from the replay buffer every time
     gamma = 0.95  # discount factor
     epsilon = 0.99  # start with 50% exploration
-    update_freq = 5  # update epsilon every 100 episodes
+    update_freq = 1  # update epsilon every 100 episodes
     decay = 0.99  # decay rate for epsilon
 
     # cifar10 dataloader

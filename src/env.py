@@ -140,7 +140,7 @@ class ImagePerturbEnv(gym.Env):
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
         # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
-        reward = original_prob - perturbed_prob  # * np.exp(-self.lambda_ * sparsity)
+        reward = 1 if (original_prob - perturbed_prob) > 0 else -1
 
         return reward
 
@@ -154,7 +154,6 @@ class ImagePerturbEnv(gym.Env):
         """
         self.current_attack_count = 0
         self.num_samples += 1
-        print("num_samples: ", self.num_samples)
         if self.num_samples >= self.num_times_to_sample:
             self.new_image = True  # Indicate that a new image has been sampled
             self.image, self.target_class = next(self.dataloader)
