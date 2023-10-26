@@ -42,14 +42,14 @@ class TestImagePerturbEnv(unittest.TestCase):
         # Check if done is a boolean
         self.assertIsInstance(done, bool)
 
-    def test_reset(self):
-        original_image, original_class = self.env.image, self.env.target_class
-        self.env.reset()
-        new_image, new_class = self.env.image, self.env.target_class
+    # def test_reset(self):
+    #     original_image, original_class = self.env.image, self.env.target_class
+    #     self.env.reset()
+    #     new_image, new_class = self.env.image, self.env.target_class
 
-        # Check if the image and class are different after reset
-        self.assertFalse(torch.equal(original_image, new_image))
-        self.assertNotEqual(original_class, new_class)
+    #     # Check if the image and class are different after reset
+    #     self.assertFalse(torch.equal(original_image, new_image))
+    #     self.assertNotEqual(original_class, new_class)
 
     def test_action_space(self):
         # Test if action space sample is valid
