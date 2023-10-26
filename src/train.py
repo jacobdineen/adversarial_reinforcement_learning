@@ -137,6 +137,7 @@ def train(
 ) -> Tuple[QNetwork, QNetwork, List[float]]:
     buffer: deque[tuple[torch.Tensor, int, float, torch.Tensor, bool]] = deque(maxlen=10000)
     episode_scalar_rewards = []
+    all_actions_taken = []
 
     # each episode is a single image
     for episode in tqdm(range(num_episodes)):
@@ -144,7 +145,7 @@ def train(
         aggregated_episode_reward = 0  # Reset aggregated reward counter for the episode
         # that image can be sampled a number of times consecutively
         # with such a large action space, maybe it helps to see image multiple times to learn
-        for _ in range(env.num_times_to_sample + 1):
+        for i in range(env.num_times_to_sample + 1):
             logging.info(f"Using image {env.image_counter}")
             state = env.reset()
             done = False
@@ -186,8 +187,14 @@ def train(
                     optimizer2.zero_grad()
                     loss2.backward()
                     optimizer2.step()
+                if done:
+                    # logging.info("attack budget reached. Sampling new image")
+                    env.reset()
+
+                logging.info(f"Episode {episode} image sample {i} reward: {episode_reward}")
                 aggregated_episode_reward += episode_reward  # Aggregate the reward for this episode
             logging.info("reached done state")
+            all_actions_taken.append(actions_taken.copy())
 
         episode_scalar_rewards.append(aggregated_episode_reward)  # Append the aggregated reward for this episode
         print("rewards", episode_scalar_rewards)
@@ -195,18 +202,18 @@ def train(
             epsilon *= decay
 
     logging.info(f"Completed Training")
-    return q_net1, q_net2, episode_scalar_rewards
+    return q_net1, q_net2, episode_scalar_rewards, all_actions_taken
 
 
 if __name__ == "__main__":
-    num_episodes = 50  # number of episodes to train for
+    num_episodes = 100  # number of episodes to train for
     learning_rate = 10e-3  # learning rate for optimizer
     attack_budget = 50  # max number of perturbations (len(channel) pixel changes each attack)
-    num_times_to_sample = 5  # number of times to sample each image consecutively before sampling new image
+    num_times_to_sample = 40  # number of times to sample each image consecutively before sampling new image
     reward_lambda = 1
-    batch_size = 256  # sample 64 experiences from the replay buffer every time
+    batch_size = 128  # sample 64 experiences from the replay buffer every time
     gamma = 0.95  # discount factor
-    epsilon = 0.9  # start with 50% exploration
+    epsilon = 0.99  # start with 50% exploration
     update_freq = 5  # update epsilon every 100 episodes
     decay = 0.99  # decay rate for epsilon
 
@@ -251,7 +258,7 @@ if __name__ == "__main__":
         f"  - Starting Training with num_episodes: {num_episodes}"
     )
 
-    trained_qnet1, trained_qnet2, episode_rewards = train(
+    trained_qnet1, trained_qnet2, episode_rewards, all_actions_taken = train(
         env,
         q_net1,
         q_net2,
@@ -279,3 +286,19 @@ if __name__ == "__main__":
     torch.save({"q_net1": trained_qnet1.state_dict(), "q_net2": trained_qnet2.state_dict()}, SAVE_PATH)
 
     logging.info(f"Trained Q-Networks saved successfully to {SAVE_PATH}")
+
+    import csv
+
+    # Save episode_rewards
+    with open("episode_rewards.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Episode", "Reward"])
+        for i, reward in enumerate(episode_rewards):
+            writer.writerow([i, reward])
+
+    # Save all_actions_taken
+    with open("all_actions_taken.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Episode", "Actions"])
+        for i, actions in enumerate(all_actions_taken):
+            writer.writerow([i, ",".join(map(str, actions))])

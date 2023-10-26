@@ -115,9 +115,6 @@ class ImagePerturbEnv(gym.Env):
         reward = self.compute_reward(self.image, perturbed_image)
 
         done = self.current_attack_count >= self.attack_budget  # continue until attack budget reached
-        if done:
-            # logging.info("attack budget reached. Sampling new image")
-            self.reset()
 
         self.image = perturbed_image
 
@@ -142,8 +139,8 @@ class ImagePerturbEnv(gym.Env):
             perturbed_output = self.model(perturbed_image)
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
-        sparsity = torch.nonzero(perturbed_image - original_image).size(0)
-        reward = original_prob - perturbed_prob * np.exp(-self.lambda_ * sparsity)
+        # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
+        reward = original_prob - perturbed_prob  # * np.exp(-self.lambda_ * sparsity)
 
         return reward
 
@@ -157,7 +154,7 @@ class ImagePerturbEnv(gym.Env):
         """
         self.current_attack_count = 0
         self.num_samples += 1
-
+        print("num_samples: ", self.num_samples)
         if self.num_samples >= self.num_times_to_sample:
             self.new_image = True  # Indicate that a new image has been sampled
             self.image, self.target_class = next(self.dataloader)
@@ -190,7 +187,7 @@ if __name__ == "__main__":
     model = load_model()
     env = ImagePerturbEnv(dataloader=dataloader, model=model, attack_budget=100)
 
-    num_steps = env.attack_budget - 1 * env.num_times_to_sample
+    num_steps = env.attack_budget - 1 * env.num_times_to_sample * 2
     for _ in range(num_steps):
         original_image = env.image.clone().detach().cpu().numpy().squeeze()
         action = env.action_space.sample()
