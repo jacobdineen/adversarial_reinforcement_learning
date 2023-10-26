@@ -15,11 +15,13 @@ from gym import spaces
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
-from torchvision.models import resnet50
+
+from src.utils import load_model
 
 logging.basicConfig(level=logging.INFO)
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+CLASSES = ("plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
 
 
 class ImagePerturbEnv(gym.Env):
@@ -39,7 +41,14 @@ class ImagePerturbEnv(gym.Env):
         image_shape (Tuple[int, int, int]): The shape of the image tensor.
     """
 
-    def __init__(self, dataloader: Any, model: torch.nn.Module, attack_budget: int = 20, lambda_: float = 1.0):
+    def __init__(
+        self,
+        dataloader: Any,
+        model: torch.nn.Module,
+        attack_budget: int = 20,
+        lambda_: float = 1.0,
+        num_times_to_sample: int = 5,
+    ):
         """
         Initialize the environment.
 
@@ -48,6 +57,7 @@ class ImagePerturbEnv(gym.Env):
             model: The deep learning model to evaluate against.
             attack_budget: The number of steps available to perturb the image.
             lambda_: hyperparameter that controls how severely we penalize non-sparse solutions. A higher LAMBDA means a steeper penalty.
+            num_times_to_sample: number of times to repeat the same image before resampling the next one
         """
         logging.info("env device: {}".format(DEVICE))
         self.dataloader = iter(dataloader)
@@ -58,12 +68,16 @@ class ImagePerturbEnv(gym.Env):
         self.target_class = self.target_class.to(DEVICE)
         self.original_image = self.image.clone()  # Save the original image
         self.image_shape = self.image.shape  # torch.Size([1, 3, 224, 224]) for cifar
-        total_actions = self.image_shape[1] * self.image_shape[2] * self.image_shape[3]
+        total_actions = self.image_shape[2] * self.image_shape[3]
         self.action_space = spaces.Discrete(total_actions)
         self.observation_space = spaces.Box(low=0, high=1, shape=self.image_shape, dtype=np.float32)
         self.attack_budget = attack_budget
         self.lambda_ = lambda_
         self.current_attack_count = 0
+        self.num_times_to_sample = num_times_to_sample
+        self.num_samples = 0
+        self.image_counter = 0
+        self.new_image = False
 
         logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
         logging.info(f"Action Space Size: {total_actions}")
@@ -94,7 +108,9 @@ class ImagePerturbEnv(gym.Env):
             action, self.image_shape[2] * self.image_shape[3]
         )  # channel, x*y coordinates in the image
         x, y = divmod(temp, self.image_shape[3])  # x, y coordinates in the image
-        perturbed_image[0, channel, x, y] = 0  # perturb the image by setting the pixel to 0
+        # perturbed_image[0, channel, x, y] = 0  # perturb the image by setting the pixel to 0
+        for channel in range(self.image_shape[1]):
+            perturbed_image[0, channel, x, y] = 0
 
         reward = self.compute_reward(self.image, perturbed_image)
 
@@ -126,23 +142,33 @@ class ImagePerturbEnv(gym.Env):
             perturbed_output = self.model(perturbed_image)
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
-        # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
-        reward = original_prob - perturbed_prob  # * np.exp(-self.lambda_ * sparsity)
+        sparsity = torch.nonzero(perturbed_image - original_image).size(0)
+        reward = original_prob - perturbed_prob * np.exp(-self.lambda_ * sparsity)
 
         return reward
 
     def reset(self) -> torch.Tensor:
         """
-        Reset the environment state.
+        Reset the environment state if the num times to sample has been reached.
+        Otherwise, reset the image to the original image.and continue sampling.
 
         Returns:
             The new state (image) after resetting.
         """
-        self.image, self.target_class = next(self.dataloader)
-        self.image = self.image.to(DEVICE)
-        self.target_class = self.target_class.to(DEVICE)
-        self.original_image = self.image.clone()  # Save the original image again
         self.current_attack_count = 0
+        self.num_samples += 1
+
+        if self.num_samples >= self.num_times_to_sample:
+            self.new_image = True  # Indicate that a new image has been sampled
+            self.image, self.target_class = next(self.dataloader)
+            self.image = self.image.to(DEVICE)
+            self.target_class = self.target_class.to(DEVICE)
+            self.original_image = self.image.clone()  # Save the new original image
+            self.num_samples = 0  # Reset the counter
+            self.image_counter += 1  # Increment the image counter
+        else:
+            self.new_image = False  # Indicate that it's the same image as before
+            self.image = self.original_image.clone()  # Reset to the original image
 
         return self.image
 
@@ -161,10 +187,10 @@ if __name__ == "__main__":
     dataset = CIFAR10(root="./data", train=True, download=True, transform=transform_chain)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
 
-    model = resnet50(pretrained=True)
-    env = ImagePerturbEnv(dataloader=dataloader, model=model)
+    model = load_model()
+    env = ImagePerturbEnv(dataloader=dataloader, model=model, attack_budget=100)
 
-    num_steps = env.attack_budget - 1
+    num_steps = env.attack_budget - 1 * env.num_times_to_sample
     for _ in range(num_steps):
         original_image = env.image.clone().detach().cpu().numpy().squeeze()
         action = env.action_space.sample()
@@ -205,35 +231,18 @@ if __name__ == "__main__":
     highlighted_isolated = np.zeros_like(original_image_T)
     for i in range(len(changed_pixels[0])):
         channel_idx, x_idx, y_idx = changed_pixels[0][i], changed_pixels[1][i], changed_pixels[2][i]
-        # Set the RGB value based on the channel index
-        if channel_idx == 0:
-            highlighted_isolated[x_idx, y_idx, :] = [255, 0, 0]  # Red for channel 0
-        elif channel_idx == 1:
-            highlighted_isolated[x_idx, y_idx, :] = [0, 255, 0]  # Green for channel 1
-        elif channel_idx == 2:
-            highlighted_isolated[x_idx, y_idx, :] = [0, 0, 255]  # Blue for channel 2
+        highlighted_isolated[x_idx, y_idx, :] = [255, 0, 0]  # Red for channel 0
 
     plt.figure()
     plt.subplot(1, 3, 1)
-    plt.title(f"Original (Class: {original_class.item()}, Prob: {original_prob.item():.10f})")
+    plt.title(f"Original (Class: {CLASSES[original_class.item()]}, Prob: {original_prob.item():.6f})")
     plt.imshow(np.transpose(original_image, (1, 2, 0)))
 
     plt.subplot(1, 3, 2)
-    plt.title(f"Perturbed (Class: {perturbed_class.item()}, Prob: {perturbed_prob.item():.10f})")
+    plt.title(f"Perturbed (Class: {CLASSES[perturbed_class.item()]}, Prob: {perturbed_prob.item():.6f})")
     plt.imshow(np.transpose(perturbed_image, (1, 2, 0)))
 
     plt.subplot(1, 3, 3)
     plt.title("Highlighted Changes")
     plt.imshow(highlighted_isolated)
-    # Create custom handles for the legend
-    ax = plt.gca()
-    ax.annotate("Channel 0: Red", xy=(1.1, 0.2), xycoords="axes fraction", color="red")
-    ax.annotate("Channel 1: Green", xy=(1.1, 0.3), xycoords="axes fraction", color="green")
-    ax.annotate("Channel 2: Blue", xy=(1.1, 0.4), xycoords="axes fraction", color="blue")
-
-    plt.show()
-
-    # plt.subplot(1, 3, 3)
-    # plt.title('Highlighted')
-    # plt.imshow(np.transpose(highlighted_image, (1, 2, 0)).squeeze())
     plt.show()

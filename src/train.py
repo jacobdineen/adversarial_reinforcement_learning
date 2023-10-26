@@ -136,64 +136,75 @@ def train(
     decay: float = 0.99,
 ) -> Tuple[QNetwork, QNetwork, List[float]]:
     buffer: deque[tuple[torch.Tensor, int, float, torch.Tensor, bool]] = deque(maxlen=10000)
-    episode_rewards = []
+    episode_scalar_rewards = []
 
+    # each episode is a single image
     for episode in tqdm(range(num_episodes)):
-        state = env.reset()
-        done = False
-        episode_reward = 0
-        actions_taken = set()
+        logging.info(f"Starting episode {episode}")
+        aggregated_episode_reward = 0  # Reset aggregated reward counter for the episode
+        # that image can be sampled a number of times consecutively
+        # with such a large action space, maybe it helps to see image multiple times to learn
+        for _ in range(env.num_times_to_sample + 1):
+            logging.info(f"Using image {env.image_counter}")
+            state = env.reset()
+            done = False
+            episode_reward = 0
+            actions_taken = set()
 
-        while not done:
-            action, actions_taken = policy(state, epsilon, q_net1, q_net2, actions_taken)
-            next_state, reward, done, _ = env.step(action)
-            buffer.append((state, action, reward, next_state, done))
-            state = next_state
-            episode_reward += reward
+            while not done:
+                action, actions_taken = policy(state, epsilon, q_net1, q_net2, actions_taken)
+                # logging.info(actions_taken)
+                next_state, reward, done, _ = env.step(action)
+                buffer.append((state, action, reward, next_state, done))
+                state = next_state
+                episode_reward += reward  # Aggregate this sampling's reward
 
-            if len(buffer) >= batch_size:
-                batch = random.sample(buffer, batch_size)
-                states, actions, rewards, next_states, dones = zip(*batch)
-                states = torch.stack(states).to(DEVICE)
-                actions = torch.LongTensor(actions).to(DEVICE)
-                rewards = torch.FloatTensor(rewards).to(DEVICE)
-                next_states = torch.stack(next_states).to(DEVICE)
-                dones = torch.FloatTensor(dones).to(DEVICE)
+                if len(buffer) >= batch_size:
+                    batch = random.sample(buffer, batch_size)
+                    states, actions, rewards, next_states, dones = zip(*batch)
+                    states = torch.stack(states).to(DEVICE)
+                    actions = torch.LongTensor(actions).to(DEVICE)
+                    rewards = torch.FloatTensor(rewards).to(DEVICE)
+                    next_states = torch.stack(next_states).to(DEVICE)
+                    dones = torch.FloatTensor(dones).to(DEVICE)
 
-                curr_Q1 = q_net1(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
-                curr_Q2 = q_net2(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
+                    curr_Q1 = q_net1(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
+                    curr_Q2 = q_net2(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
 
-                next_actions = q_net1(next_states).argmax(1)
-                next_Q = q_net2(next_states).gather(1, next_actions.unsqueeze(-1)).squeeze(-1)
+                    next_actions = q_net1(next_states).argmax(1)
+                    next_Q = q_net2(next_states).gather(1, next_actions.unsqueeze(-1)).squeeze(-1)
 
-                target_Q = rewards + (gamma * next_Q) * (1 - dones)
+                    target_Q = rewards + (gamma * next_Q) * (1 - dones)
 
-                loss1 = nn.functional.smooth_l1_loss(curr_Q1, target_Q.detach())
-                loss2 = nn.functional.smooth_l1_loss(curr_Q2, target_Q.detach())
+                    loss1 = nn.functional.smooth_l1_loss(curr_Q1, target_Q.detach())
+                    loss2 = nn.functional.smooth_l1_loss(curr_Q2, target_Q.detach())
 
-                optimizer1.zero_grad()
-                loss1.backward()
-                optimizer1.step()
+                    optimizer1.zero_grad()
+                    loss1.backward()
+                    optimizer1.step()
 
-                optimizer2.zero_grad()
-                loss2.backward()
-                optimizer2.step()
+                    optimizer2.zero_grad()
+                    loss2.backward()
+                    optimizer2.step()
+                aggregated_episode_reward += episode_reward  # Aggregate the reward for this episode
+            logging.info("reached done state")
 
-        episode_rewards.append(episode_reward)
-
+        episode_scalar_rewards.append(aggregated_episode_reward)  # Append the aggregated reward for this episode
+        print("rewards", episode_scalar_rewards)
         if episode % update_freq == 0:
             epsilon *= decay
 
     logging.info(f"Completed Training")
-    return q_net1, q_net2, episode_rewards
+    return q_net1, q_net2, episode_scalar_rewards
 
 
 if __name__ == "__main__":
-    num_episodes = 100  # number of episodes to train for
+    num_episodes = 50  # number of episodes to train for
     learning_rate = 10e-3  # learning rate for optimizer
     attack_budget = 50  # max number of perturbations (len(channel) pixel changes each attack)
+    num_times_to_sample = 5  # number of times to sample each image consecutively before sampling new image
     reward_lambda = 1
-    batch_size = 128  # sample 64 experiences from the replay buffer every time
+    batch_size = 256  # sample 64 experiences from the replay buffer every time
     gamma = 0.95  # discount factor
     epsilon = 0.9  # start with 50% exploration
     update_freq = 5  # update epsilon every 100 episodes
@@ -204,7 +215,13 @@ if __name__ == "__main__":
     # classififer
     model = load_model()
     # env
-    env = ImagePerturbEnv(dataloader=dataloader, model=model, attack_budget=attack_budget, lambda_=reward_lambda)
+    env = ImagePerturbEnv(
+        dataloader=dataloader,
+        model=model,
+        attack_budget=attack_budget,
+        lambda_=reward_lambda,
+        num_times_to_sample=num_times_to_sample,
+    )
 
     # Initialize Q-Network and Optimizer here, and pass them to train
     # input_shape = env.observation_space.shape
