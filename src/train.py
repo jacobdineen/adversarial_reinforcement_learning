@@ -3,6 +3,7 @@
 import logging
 import random
 
+import matplotlib.pyplot as plt
 import torch
 from stable_baselines3 import PPO
 
@@ -20,13 +21,16 @@ torch.cuda.manual_seed_all(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
+
 if __name__ == "__main__":
-    attack_budget = 1  # max number of perturbations (len(channel) pixel changes each attack)
-    num_times_to_sample = 1  # number of times to sample each image consecutively before sampling new image
+    attack_budget = 50  # max number of perturbations (len(channel) pixel changes each attack)
+    num_times_to_sample = 10  # number of times to sample each image consecutively before sampling new image
     reward_lambda = 1
+    n_steps = attack_budget * num_times_to_sample
 
     # cifar10 dataloader
     dataloader = get_cifar_dataloader()
+
     # classififer
     model = load_model()
     # env
@@ -39,6 +43,20 @@ if __name__ == "__main__":
     )
 
     print("here")
-    model = PPO("MlpPolicy", env, device=DEVICE, verbose=1)
+    model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=n_steps, batch_size=128)
     print("here")
-    model.learn(total_timesteps=1, progress_bar=True)
+    model.learn(total_timesteps=1, progress_bar=True, log_interval=1)
+    print(model.ep_info_buffer)
+    ep_info_buffer = model.ep_info_buffer
+
+    rewards = [info["r"] for info in ep_info_buffer]
+    lengths = [info["l"] for info in ep_info_buffer]
+    times = [info["t"] for info in ep_info_buffer]
+
+    # To plot rewards
+    plt.figure()
+    plt.plot(rewards)
+    plt.title("Rewards over Episodes")
+    plt.xlabel("Episode")
+    plt.ylabel("Reward")
+    plt.show()

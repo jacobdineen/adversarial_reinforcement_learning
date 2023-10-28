@@ -140,11 +140,14 @@ class ImagePerturbEnv(gym.Env):
             perturbed_output = self.model(perturbed_image)
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
+        sparsity = torch.nonzero(perturbed_image - original_image).size(0)
+        reward = original_prob - perturbed_prob * np.exp(-self.lambda_ * sparsity)
         # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
-        reward = 1 if (original_prob - perturbed_prob) > 0 else -1
+        # reward = 1 if (original_prob - perturbed_prob) > 0 else -1
 
         return reward
 
+    # pylint: disable=unused-argument
     def reset(self, seed=None) -> torch.Tensor:
         """
         Reset the environment state if the num times to sample has been reached.
@@ -163,10 +166,12 @@ class ImagePerturbEnv(gym.Env):
             self.original_image = self.image.clone()  # Save the new original image
             self.num_samples = 0  # Reset the counter
             self.image_counter += 1  # Increment the image counter
+            logging.info(f"Sampling new image from dataloader. Image Counter: {self.image_counter}")
         else:
             self.new_image = False  # Indicate that it's the same image as before
             self.image = self.original_image.clone()  # Reset to the original image
-
+            logging.info(f"Resetting to original image. Image Counter: {self.image_counter}")
+        logging.info("Resetting the environment")
         return self.image, {}
 
 
