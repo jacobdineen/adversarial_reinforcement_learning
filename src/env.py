@@ -6,12 +6,12 @@ to be used downstream for model trianing
 import logging
 from typing import Any, Dict, Tuple
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
-from gym import spaces
+from gymnasium import spaces
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
@@ -21,6 +21,7 @@ from src.utils import load_model
 logging.basicConfig(level=logging.INFO)
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+DEVICE = "cpu"
 CLASSES = ("plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
 
 
@@ -118,7 +119,7 @@ class ImagePerturbEnv(gym.Env):
 
         self.image = perturbed_image
 
-        return perturbed_image, reward, done, {}
+        return perturbed_image, reward, done, {}, {}
 
     def compute_reward(self, original_image: torch.Tensor, perturbed_image: torch.Tensor) -> float:
         """_summary_
@@ -144,7 +145,7 @@ class ImagePerturbEnv(gym.Env):
 
         return reward
 
-    def reset(self) -> torch.Tensor:
+    def reset(self, seed=None) -> torch.Tensor:
         """
         Reset the environment state if the num times to sample has been reached.
         Otherwise, reset the image to the original image.and continue sampling.
@@ -166,7 +167,7 @@ class ImagePerturbEnv(gym.Env):
             self.new_image = False  # Indicate that it's the same image as before
             self.image = self.original_image.clone()  # Reset to the original image
 
-        return self.image
+        return self.image, {}
 
 
 if __name__ == "__main__":
@@ -190,7 +191,7 @@ if __name__ == "__main__":
     for _ in range(num_steps):
         original_image = env.image.clone().detach().cpu().numpy().squeeze()
         action = env.action_space.sample()
-        next_state, reward, done, _ = env.step(action)
+        next_state, reward, done, _, _ = env.step(action)
         perturbed_image = next_state.clone().detach().cpu().numpy().squeeze()
         if done:
             env.reset()
