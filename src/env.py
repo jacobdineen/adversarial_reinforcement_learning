@@ -86,7 +86,7 @@ class ImagePerturbEnv(gym.Env):
         logging.info(f"Attack Budget: {self.attack_budget}")
         logging.info(f"Initial Image Shape: {self.image_shape}")
 
-    def step(self, action: int) -> Tuple[torch.Tensor, float, bool, Dict[str, Any]]:
+    def step(self, action: int) -> Tuple[torch.Tensor, float, bool, bool, Dict[str, Any]]:
         """
         Take a step using an action.
 
@@ -100,6 +100,7 @@ class ImagePerturbEnv(gym.Env):
                 - perturbed_image: The new state (perturbed image)
                 - reward: The reward for the taken action
                 - done: Flag indicating if the episode has ended
+                - truncated: Flag indicating if the episode was truncated (currently unused)
                 - info: Additional information (empty in this case)
         """
         self.current_attack_count += 1
@@ -119,7 +120,15 @@ class ImagePerturbEnv(gym.Env):
 
         self.image = perturbed_image
 
-        return perturbed_image, reward, done, {}, {}
+        # "Whether the truncation condition outside the scope of the MDP is satisfied.
+        # Typically, this is a timelimit, but could also be used to indicate an agent physically going out of bounds.
+        # Can be used to end the episode prematurely before a terminal state is reached.
+        # If true, the user needs to call :meth:`reset`."
+        truncated = False
+
+        info = dict()
+
+        return perturbed_image, reward, done, truncated, info
 
     def compute_reward(self, original_image: torch.Tensor, perturbed_image: torch.Tensor) -> float:
         """_summary_
