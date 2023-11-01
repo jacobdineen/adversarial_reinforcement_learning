@@ -54,7 +54,7 @@ if __name__ == "__main__":
     print("here")
     model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=n_steps, batch_size=128)
     print("here")
-    model.learn(total_timesteps=2, progress_bar=True, log_interval=1)
+    model.learn(total_timesteps=n_steps, progress_bar=True, log_interval=1)
     print(model.ep_info_buffer)
     ep_info_buffer = model.ep_info_buffer
 
