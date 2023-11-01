@@ -35,7 +35,8 @@ if __name__ == "__main__":
     num_times_to_sample = 1  # number of times to sample each image consecutively before sampling new image
     reward_lambda = 1
     episodes = 100
-    n_steps = attack_budget * num_times_to_sample * episodes
+    steps_per_episode = attack_budget * num_times_to_sample
+    n_steps = steps_per_episode * episodes
 
     # cifar10 dataloader
     dataloader = get_cifar_dataloader()
@@ -52,7 +53,7 @@ if __name__ == "__main__":
     )
 
     print("here")
-    model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=n_steps, batch_size=128)
+    model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=128)
     print("here")
     model.learn(total_timesteps=n_steps, progress_bar=True, log_interval=1)
     print(model.ep_info_buffer)
