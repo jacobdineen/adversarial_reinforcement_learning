@@ -4,6 +4,7 @@ import logging
 import random
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from stable_baselines3 import PPO
 
@@ -22,6 +23,27 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 
+def plot_rewards_and_cumulative(rewards):
+    cumulative_rewards = np.cumsum(rewards)
+
+    plt.figure(figsize=(14, 7))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(rewards)
+    plt.title("Rewards over Episodes")
+    plt.xlabel("Episode")
+    plt.ylabel("Reward")
+
+    plt.subplot(1, 2, 2)
+    plt.plot(cumulative_rewards)
+    plt.title("Cumulative Rewards over Episodes")
+    plt.xlabel("Episode")
+    plt.ylabel("Cumulative Reward")
+
+    plt.tight_layout()
+    plt.show()
+
+
 if __name__ == "__main__":
     # There is still a weird disconnect here between what we define as an episode
     # and what stable baselines expects as an episode. We need to figure out how to
@@ -31,10 +53,10 @@ if __name__ == "__main__":
     # equal to the number of steps in the stable baselines model.
 
     # hyperparameters for stable baselines / env
-    attack_budget = 10  # max number of perturbations (len(channel) pixel changes each attack)
+    attack_budget = 20  # max number of perturbations (len(channel) pixel changes each attack)
     num_times_to_sample = 1  # number of times to sample each image consecutively before sampling new image
     reward_lambda = 1
-    episodes = 100
+    episodes = 20
     steps_per_episode = attack_budget * num_times_to_sample
     n_steps = steps_per_episode * episodes
 
@@ -63,10 +85,4 @@ if __name__ == "__main__":
     lengths = [info["l"] for info in ep_info_buffer]
     times = [info["t"] for info in ep_info_buffer]
 
-    # To plot rewards
-    plt.figure()
-    plt.plot(rewards)
-    plt.title("Rewards over Episodes")
-    plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.show()
+    plot_rewards_and_cumulative(rewards)

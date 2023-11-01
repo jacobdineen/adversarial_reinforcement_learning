@@ -149,8 +149,8 @@ class ImagePerturbEnv(gym.Env):
             perturbed_output = self.model(perturbed_image)
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
-        sparsity = torch.nonzero(perturbed_image - original_image).size(0)
-        reward = original_prob - perturbed_prob * np.exp(-self.lambda_ * sparsity)
+        # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
+        reward = original_prob - perturbed_prob  # * np.exp(-self.lambda_ * sparsity)
         # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
         # reward = 1 if (original_prob - perturbed_prob) > 0 else -1
 
