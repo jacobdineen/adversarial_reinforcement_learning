@@ -156,8 +156,7 @@ class ImagePerturbEnv(gym.Env):
 
         return reward
 
-    # pylint: disable=unused-argument
-    def reset(self, seed=None) -> torch.Tensor:
+    def reset(self, seed: int | None = None) -> tuple[torch.Tensor, dict]:
         """
         Reset the environment state if the num times to sample has been reached.
         Otherwise, reset the image to the original image.and continue sampling.
@@ -165,6 +164,8 @@ class ImagePerturbEnv(gym.Env):
         Returns:
             The new state (image) after resetting.
         """
+        super().reset(seed=seed)
+
         self.current_attack_count = 0
         self.num_samples += 1
         if self.num_samples >= self.num_times_to_sample:
@@ -181,7 +182,10 @@ class ImagePerturbEnv(gym.Env):
             self.image = self.original_image.clone()  # Reset to the original image
             logging.info(f"Resetting to original image. Image Counter: {self.image_counter}")
         logging.info("Resetting the environment")
-        return self.image, {}
+
+        info = dict()
+
+        return self.image, info
 
 
 if __name__ == "__main__":
