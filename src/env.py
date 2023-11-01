@@ -46,9 +46,8 @@ class ImagePerturbEnv(gym.Env):
         self,
         dataloader: Any,
         model: torch.nn.Module,
-        attack_budget: int = 20,
         lambda_: float = 1.0,
-        num_times_to_sample: int = 5,
+        steps_per_episode: int = 100,
     ):
         """
         Initialize the environment.
@@ -56,9 +55,7 @@ class ImagePerturbEnv(gym.Env):
         Args:
             dataloader: PyTorch DataLoader iterator.
             model: The deep learning model to evaluate against.
-            attack_budget: The number of steps available to perturb the image.
             lambda_: hyperparameter that controls how severely we penalize non-sparse solutions. A higher LAMBDA means a steeper penalty.
-            num_times_to_sample: number of times to repeat the same image before resampling the next one
         """
         logging.info("env device: {}".format(DEVICE))
         self.dataloader = iter(dataloader)
@@ -72,18 +69,15 @@ class ImagePerturbEnv(gym.Env):
         total_actions = self.image_shape[2] * self.image_shape[3]
         self.action_space = spaces.Discrete(total_actions)
         self.observation_space = spaces.Box(low=0, high=1, shape=self.image_shape, dtype=np.float32)
-        self.attack_budget = attack_budget
         self.lambda_ = lambda_
-        self.current_attack_count = 0
-        self.num_times_to_sample = num_times_to_sample
-        self.num_samples = 0
         self.image_counter = 0
-        self.new_image = False
+        self.steps_per_episode = steps_per_episode
+        self.current_step = 0
+        self.episode_count = 0
 
         logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
         logging.info(f"Action Space Size: {total_actions}")
         logging.info(f"Observation Space Shape: {self.observation_space.shape}")
-        logging.info(f"Attack Budget: {self.attack_budget}")
         logging.info(f"Initial Image Shape: {self.image_shape}")
 
     def step(self, action: int) -> Tuple[torch.Tensor, float, bool, bool, Dict[str, Any]]:
@@ -103,7 +97,6 @@ class ImagePerturbEnv(gym.Env):
                 - truncated: Flag indicating if the episode was truncated (currently unused)
                 - info: Additional information (empty in this case)
         """
-        self.current_attack_count += 1
         perturbed_image = self.image.clone().to(DEVICE)
 
         channel, temp = divmod(
@@ -116,19 +109,15 @@ class ImagePerturbEnv(gym.Env):
 
         reward = self.compute_reward(self.image, perturbed_image)
 
-        done = self.current_attack_count >= self.attack_budget  # continue until attack budget reached
+        # Increment the step counter and check if the episode should end
+        self.current_step += 1
+        done = self.current_step >= self.steps_per_episode
 
-        self.image = perturbed_image
+        # Reset the environment (sample new image) after each step
+        self.reset()
 
-        # "Whether the truncation condition outside the scope of the MDP is satisfied.
-        # Typically, this is a timelimit, but could also be used to indicate an agent physically going out of bounds.
-        # Can be used to end the episode prematurely before a terminal state is reached.
-        # If true, the user needs to call :meth:`reset`."
-        truncated = False
-
-        info = dict()
-
-        return perturbed_image, reward, done, truncated, info
+        # Only set done to True after steps_per_episode steps
+        return perturbed_image, reward, done, False, {}
 
     def compute_reward(self, original_image: torch.Tensor, perturbed_image: torch.Tensor) -> float:
         """_summary_
@@ -162,99 +151,93 @@ class ImagePerturbEnv(gym.Env):
             The new state (image) after resetting.
         """
         super().reset(seed=seed)
+        # Reset the step if we reached the end of an episode
+        if self.current_step >= self.steps_per_episode:
+            self.current_step = 0
+            self.episode_count += 1
 
-        self.current_attack_count = 0
-        self.num_samples += 1
-        if self.num_samples >= self.num_times_to_sample:
-            self.new_image = True  # Indicate that a new image has been sampled
-            self.image, self.target_class = next(self.dataloader)
-            self.image = self.image.to(DEVICE)
-            self.target_class = self.target_class.to(DEVICE)
-            self.original_image = self.image.clone()  # Save the new original image
-            self.num_samples = 0  # Reset the counter
-            self.image_counter += 1  # Increment the image counter
-            logging.info(f"Sampling new image from dataloader. Image Counter: {self.image_counter}")
-        else:
-            self.new_image = False  # Indicate that it's the same image as before
-            self.image = self.original_image.clone()  # Reset to the original image
-            logging.info(f"Resetting to original image. Image Counter: {self.image_counter}")
-        logging.info("Resetting the environment")
-
+        self.image, self.target_class = next(self.dataloader)
+        self.image = self.image.to(DEVICE)
+        self.target_class = self.target_class.to(DEVICE)
+        self.original_image = self.image.clone()
+        logging.info(f"Resetting environment with new image and target class: {self.target_class.item()}")
+        logging.info(f"episode count: {self.episode_count}")
+        logging.info(f"current_step: {self.current_step}")
         info = dict()
 
         return self.image, info
 
 
-if __name__ == "__main__":
-    # This is mainly just for testing
-    # but can likely be lifted for other parts of the codebase
+# if __name__ == "__main__":
+#     # This is mainly just for testing
+#     # but can likely be lifted for other parts of the codebase
 
-    transform_chain = transforms.Compose(
-        [
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-        ]
-    )
+#     transform_chain = transforms.Compose(
+#         [
+#             transforms.Resize((224, 224)),
+#             transforms.ToTensor(),
+#         ]
+#     )
 
-    dataset = CIFAR10(root="./data", train=True, download=True, transform=transform_chain)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+#     dataset = CIFAR10(root="./data", train=True, download=True, transform=transform_chain)
+#     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
 
-    model = load_model()
-    env = ImagePerturbEnv(dataloader=dataloader, model=model, attack_budget=100)
+#     model = load_model()
+#     env = ImagePerturbEnv(dataloader=dataloader, model=model, attack_budget=100)
 
-    num_steps = env.attack_budget - 1 * env.num_times_to_sample * 2
-    for _ in range(num_steps):
-        original_image = env.image.clone().detach().cpu().numpy().squeeze()
-        action = env.action_space.sample()
-        next_state, reward, done, _, _ = env.step(action)
-        perturbed_image = next_state.clone().detach().cpu().numpy().squeeze()
-        if done:
-            env.reset()
+#     num_steps = env.attack_budget - 1 * env.num_times_to_sample * 2
+#     for _ in range(num_steps):
+#         original_image = env.image.clone().detach().cpu().numpy().squeeze()
+#         action = env.action_space.sample()
+#         next_state, reward, done, _, _ = env.step(action)
+#         perturbed_image = next_state.clone().detach().cpu().numpy().squeeze()
+#         if done:
+#             env.reset()
 
-    with torch.no_grad():
-        original_output = model(env.original_image)
-        original_prob, original_class = F.softmax(original_output, dim=1).max(dim=1)
+#     with torch.no_grad():
+#         original_output = model(env.original_image)
+#         original_prob, original_class = F.softmax(original_output, dim=1).max(dim=1)
 
-        perturbed_output = model(env.image)
-        perturbed_prob, perturbed_class = F.softmax(perturbed_output, dim=1).max(dim=1)
+#         perturbed_output = model(env.image)
+#         perturbed_prob, perturbed_class = F.softmax(perturbed_output, dim=1).max(dim=1)
 
-        # print(f"Original Model Output: {original_output}")
-        print(f"Original Model class and Probability: {original_class.item()}, {original_prob.item()}")
+#         # print(f"Original Model Output: {original_output}")
+#         print(f"Original Model class and Probability: {original_class.item()}, {original_prob.item()}")
 
-        # print(f"Perturbed Model Output: {perturbed_output}")
-        print(f"Perturbed Model class and Probability: {perturbed_class.item()}, {perturbed_prob.item()}")
+#         # print(f"Perturbed Model Output: {perturbed_output}")
+#         print(f"Perturbed Model class and Probability: {perturbed_class.item()}, {perturbed_prob.item()}")
 
-    original_image = env.original_image.clone().detach().cpu().numpy().squeeze()
-    perturbed_image = next_state.clone().detach().cpu().numpy().squeeze()
+#     original_image = env.original_image.clone().detach().cpu().numpy().squeeze()
+#     perturbed_image = next_state.clone().detach().cpu().numpy().squeeze()
 
-    changed_pixels = np.where(original_image != perturbed_image)
-    print(f"Number of pixels changed: {len(changed_pixels[0])}")
-    print("Shape of original_image: ", original_image.shape)
-    print("Shape of perturbed_image: ", perturbed_image.shape)
-    print("Length of changed_pixels tuple: ", len(changed_pixels))
+#     changed_pixels = np.where(original_image != perturbed_image)
+#     print(f"Number of pixels changed: {len(changed_pixels[0])}")
+#     print("Shape of original_image: ", original_image.shape)
+#     print("Shape of perturbed_image: ", perturbed_image.shape)
+#     print("Length of changed_pixels tuple: ", len(changed_pixels))
 
-    # Since you only have 3 dimensions [channel, height, width]
-    for i in range(len(changed_pixels[0])):
-        channel_idx, x_idx, y_idx = changed_pixels[0][i], changed_pixels[1][i], changed_pixels[2][i]
-        pixel_value = perturbed_image[channel_idx, x_idx, y_idx].item()
-        print(f"Pixel value in perturbed image at ({x_idx}, {y_idx}, channel: {channel_idx}): {pixel_value}")
+#     # Since you only have 3 dimensions [channel, height, width]
+#     for i in range(len(changed_pixels[0])):
+#         channel_idx, x_idx, y_idx = changed_pixels[0][i], changed_pixels[1][i], changed_pixels[2][i]
+#         pixel_value = perturbed_image[channel_idx, x_idx, y_idx].item()
+#         print(f"Pixel value in perturbed image at ({x_idx}, {y_idx}, channel: {channel_idx}): {pixel_value}")
 
-    original_image_T = np.transpose(original_image, (1, 2, 0))
-    highlighted_isolated = np.zeros_like(original_image_T)
-    for i in range(len(changed_pixels[0])):
-        channel_idx, x_idx, y_idx = changed_pixels[0][i], changed_pixels[1][i], changed_pixels[2][i]
-        highlighted_isolated[x_idx, y_idx, :] = [255, 0, 0]  # Red for channel 0
+#     original_image_T = np.transpose(original_image, (1, 2, 0))
+#     highlighted_isolated = np.zeros_like(original_image_T)
+#     for i in range(len(changed_pixels[0])):
+#         channel_idx, x_idx, y_idx = changed_pixels[0][i], changed_pixels[1][i], changed_pixels[2][i]
+#         highlighted_isolated[x_idx, y_idx, :] = [255, 0, 0]  # Red for channel 0
 
-    plt.figure()
-    plt.subplot(1, 3, 1)
-    plt.title(f"Original (Class: {CLASSES[original_class.item()]}, Prob: {original_prob.item():.6f})")
-    plt.imshow(np.transpose(original_image, (1, 2, 0)))
+#     plt.figure()
+#     plt.subplot(1, 3, 1)
+#     plt.title(f"Original (Class: {CLASSES[original_class.item()]}, Prob: {original_prob.item():.6f})")
+#     plt.imshow(np.transpose(original_image, (1, 2, 0)))
 
-    plt.subplot(1, 3, 2)
-    plt.title(f"Perturbed (Class: {CLASSES[perturbed_class.item()]}, Prob: {perturbed_prob.item():.6f})")
-    plt.imshow(np.transpose(perturbed_image, (1, 2, 0)))
+#     plt.subplot(1, 3, 2)
+#     plt.title(f"Perturbed (Class: {CLASSES[perturbed_class.item()]}, Prob: {perturbed_prob.item():.6f})")
+#     plt.imshow(np.transpose(perturbed_image, (1, 2, 0)))
 
-    plt.subplot(1, 3, 3)
-    plt.title("Highlighted Changes")
-    plt.imshow(highlighted_isolated)
-    plt.show()
+#     plt.subplot(1, 3, 3)
+#     plt.title("Highlighted Changes")
+#     plt.imshow(highlighted_isolated)
+#     plt.show()

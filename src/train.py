@@ -46,21 +46,11 @@ def plot_rewards_and_cumulative(rewards):
 
 
 if __name__ == "__main__":
-    # There is still a weird disconnect here between what we define as an episode
-    # and what stable baselines expects as an episode. We need to figure out how to
-    # make these two things line up.
-
-    # easiest way to do this is to just make the number of steps in the env
-    # equal to the number of steps in the stable baselines model.
-
     # hyperparameters for stable baselines / env
-    attack_budget = 10  # max number of perturbations (len(channel) pixel changes each attack)
-    num_times_to_sample = 1  # number of times to sample each image consecutively before sampling new image
     reward_lambda = 1
     episodes = 100
-    steps_per_episode = attack_budget * num_times_to_sample
-    n_steps = steps_per_episode * episodes
-
+    steps_per_episode = 10  # number of images to perturb per episode
+    total_timesteps = episodes * steps_per_episode
     # cifar10 dataloader
     dataloader = get_cifar_dataloader()
 
@@ -68,16 +58,13 @@ if __name__ == "__main__":
     model = load_model()
     # env
     env = ImagePerturbEnv(
-        dataloader=dataloader,
-        model=model,
-        attack_budget=attack_budget,
-        lambda_=reward_lambda,
-        num_times_to_sample=num_times_to_sample,
+        dataloader=dataloader, model=model, lambda_=reward_lambda, steps_per_episode=steps_per_episode
     )
 
-    model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=256)
+    model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=128)
     print("here")
-    model.learn(total_timesteps=n_steps, progress_bar=True, log_interval=1)
+    model.learn(total_timesteps=total_timesteps, progress_bar=True, log_interval=1)
+
     print(model.ep_info_buffer)
     ep_info_buffer = model.ep_info_buffer
 
