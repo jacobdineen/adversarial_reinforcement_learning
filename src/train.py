@@ -13,6 +13,7 @@ from src.utils import get_cifar_dataloader, load_model
 
 logging.basicConfig(level=logging.INFO)
 
+
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # Set random seed for reproducibility
 SEED = 42
@@ -53,10 +54,10 @@ if __name__ == "__main__":
     # equal to the number of steps in the stable baselines model.
 
     # hyperparameters for stable baselines / env
-    attack_budget = 20  # max number of perturbations (len(channel) pixel changes each attack)
+    attack_budget = 10  # max number of perturbations (len(channel) pixel changes each attack)
     num_times_to_sample = 1  # number of times to sample each image consecutively before sampling new image
     reward_lambda = 1
-    episodes = 20
+    episodes = 100
     steps_per_episode = attack_budget * num_times_to_sample
     n_steps = steps_per_episode * episodes
 
@@ -74,8 +75,7 @@ if __name__ == "__main__":
         num_times_to_sample=num_times_to_sample,
     )
 
-    print("here")
-    model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=128)
+    model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=256)
     print("here")
     model.learn(total_timesteps=n_steps, progress_bar=True, log_interval=1)
     print(model.ep_info_buffer)
