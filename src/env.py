@@ -154,7 +154,7 @@ class ImagePerturbEnv(gym.Env):
         # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
         # reward = 1 if (original_prob - perturbed_prob) > 0 else -1
 
-        return reward
+        return 1 if reward > 0 else -1
 
     def reset(self, seed: int | None = None) -> tuple[torch.Tensor, dict]:
         """
