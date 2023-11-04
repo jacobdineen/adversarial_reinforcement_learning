@@ -54,7 +54,6 @@ class ImagePerturbEnv(gym.Env):
         """
         logging.info("env device: {}".format(DEVICE))
         self.dataloader = iter(dataloader)
-        self.dataloader_iter = iter(self.dataloader)
         self.model = model.to(DEVICE)
         self.model.eval()
         self.image, self.target_class = next(self.dataloader)
@@ -111,7 +110,7 @@ class ImagePerturbEnv(gym.Env):
         done = self.current_step >= self.steps_per_episode
 
         # Reset the environment (sample new image) after each step
-        self.reset()
+        # self.reset()
 
         # Only set done to True after steps_per_episode steps
         return perturbed_image, reward, done, False, {}
@@ -158,16 +157,19 @@ class ImagePerturbEnv(gym.Env):
             self.episode_count += 1
 
             try:
-                self.image, self.target_class = next(self.dataloader_iter)
+                self.image, self.target_class = next(self.dataloader)
             except StopIteration:
                 # Recreate the iterator and fetch the first item
                 # This happens when we exhaust all images within the dataloader
-                self.dataloader_iter = iter(self.dataloader)
-                self.image, self.target_class = next(self.dataloader_iter)
+                self.dataloader = iter(self.dataloader)
+                self.image, self.target_class = next(self.dataloader)
 
             self.image = self.image.to(DEVICE)
             self.target_class = self.target_class.to(DEVICE)
             self.original_image = self.image.clone()
+
+            if self.verbose:
+                logging.info(f"New data fetched successfully. Image target class: {self.target_class.item()}")
 
         if self.verbose:
             logging.info(f"Resetting environment with new image and target class: {self.target_class.item()}")

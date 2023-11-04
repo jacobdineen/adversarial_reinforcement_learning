@@ -15,11 +15,11 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 SEED = 42
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
-parser.add_argument("--num_episodes", type=int, default=2, help="Number of episodes to run.")
-parser.add_argument("--batch_size", type=int, default=50, help="Batch size for training.")
+parser.add_argument("--num_episodes", type=int, default=10, help="Number of episodes to run.")
+parser.add_argument("--batch_size", type=int, default=100, help="Batch size for training.")
 parser.add_argument("--val_split", type=float, default=0.2, help="Holdout data for validation and testing.")
 parser.add_argument(
-    "--train_limit", type=int, default=None, help="Training dataloader limit - useful for debugging shorter runs."
+    "--train_limit", type=int, default=10, help="Training dataloader limit - useful for debugging shorter runs."
 )
 args = parser.parse_args()
 
@@ -43,13 +43,14 @@ if __name__ == "__main__":
     model = load_model()
 
     # env
-    env = ImagePerturbEnv(dataloader=train_loader, model=model, steps_per_episode=steps_per_episode, verbose=False)
+    env = ImagePerturbEnv(dataloader=train_loader, model=model, steps_per_episode=steps_per_episode, verbose=True)
 
     # Training here
     model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=batch_size)
     model.learn(total_timesteps=total_timesteps, progress_bar=True)
 
     ep_info_buffer = model.ep_info_buffer
+    print(ep_info_buffer)
     rewards = [info["r"] for info in ep_info_buffer]
     lengths = [info["l"] for info in ep_info_buffer]
     times = [info["t"] for info in ep_info_buffer]
