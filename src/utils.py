@@ -37,9 +37,7 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-def get_cifar_dataloaders(
-    batch_size: int = 32, val_split: float = 0.1, seed: int = 42
-) -> tuple(DataLoader, DataLoader, DataLoader):
+def get_cifar_dataloaders(batch_size: int = 32, val_split: float = 0.1, seed: int = 42) -> tuple:
     """Get Train, Validation and Test Data Loaders for CIFAR10
 
     Args:

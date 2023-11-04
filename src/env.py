@@ -42,6 +42,7 @@ class ImagePerturbEnv(gym.Env):
         model: torch.nn.Module,
         lambda_: float = 1.0,
         steps_per_episode: int = 100,
+        verbose: bool = False,
     ):
         """
         Initialize the environment.
@@ -68,6 +69,7 @@ class ImagePerturbEnv(gym.Env):
         self.steps_per_episode = steps_per_episode
         self.current_step = 0
         self.episode_count = 0
+        self.verbose = verbose
 
         logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
         logging.info(f"Action Space Size: {total_actions}")
@@ -154,9 +156,10 @@ class ImagePerturbEnv(gym.Env):
         self.image = self.image.to(DEVICE)
         self.target_class = self.target_class.to(DEVICE)
         self.original_image = self.image.clone()
-        logging.info(f"Resetting environment with new image and target class: {self.target_class.item()}")
-        logging.info(f"episode count: {self.episode_count}")
-        logging.info(f"current_step: {self.current_step}")
+        if self.verbose:
+            logging.info(f"Resetting environment with new image and target class: {self.target_class.item()}")
+            logging.info(f"episode count: {self.episode_count}")
+            logging.info(f"current_step: {self.current_step}")
         info = dict()
 
         return self.image, info
