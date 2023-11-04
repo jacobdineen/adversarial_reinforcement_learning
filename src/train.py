@@ -19,7 +19,7 @@ parser.add_argument("--num_episodes", type=int, default=2, help="Number of episo
 parser.add_argument("--batch_size", type=int, default=50, help="Batch size for training.")
 parser.add_argument("--val_split", type=float, default=0.2, help="Holdout data for validation and testing.")
 parser.add_argument(
-    "--train_limit", type=int, default=100, help="Training dataloader limit - useful for debugging shorter runs."
+    "--train_limit", type=int, default=None, help="Training dataloader limit - useful for debugging shorter runs."
 )
 args = parser.parse_args()
 
