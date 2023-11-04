@@ -7,16 +7,10 @@ import logging
 from typing import Any, Dict, Tuple
 
 import gymnasium as gym
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
 from gymnasium import spaces
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.datasets import CIFAR10
-
-from src.utils import load_model
 
 logging.basicConfig(level=logging.INFO)
 
