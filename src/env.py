@@ -54,6 +54,7 @@ class ImagePerturbEnv(gym.Env):
         """
         logging.info("env device: {}".format(DEVICE))
         self.dataloader = iter(dataloader)
+        self.dataloader_iter = iter(self.dataloader)
         self.model = model.to(DEVICE)
         self.model.eval()
         self.image, self.target_class = next(self.dataloader)
@@ -134,32 +135,45 @@ class ImagePerturbEnv(gym.Env):
             perturbed_output = self.model(perturbed_image)
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
-        # sparsity = torch.nonzero(perturbed_image - original_image).size(0)
-        reward = (original_prob - perturbed_prob) / original_prob  # * np.exp(-self.lambda_ * sparsity
+        original_prob = max(original_prob, 1e-8)  # for underflow issues
+        reward = original_prob - perturbed_prob
         return reward
 
     def reset(self, seed: int | None = None) -> tuple[torch.Tensor, dict]:
         """
         Reset the environment state if the num times to sample has been reached.
-        Otherwise, reset the image to the original image.and continue sampling.
+        Otherwise, reset the image to the original image and continue sampling.
 
         Returns:
             The new state (image) after resetting.
         """
-        super().reset(seed=seed)
+        # Note: super().reset(seed=seed) might not be necessary unless the superclass
+        # gym.Env specifically requires it, as gym.Env's reset method does not accept a seed parameter.
+        # If your superclass does not use the seed, you can remove this line.
+        super().reset(seed=seed)  # Only if necessary.
+
         # Reset the step if we reached the end of an episode
         if self.current_step >= self.steps_per_episode:
             self.current_step = 0
             self.episode_count += 1
 
-        self.image, self.target_class = next(self.dataloader)
-        self.image = self.image.to(DEVICE)
-        self.target_class = self.target_class.to(DEVICE)
-        self.original_image = self.image.clone()
+            try:
+                self.image, self.target_class = next(self.dataloader_iter)
+            except StopIteration:
+                # Recreate the iterator and fetch the first item
+                # This happens when we exhaust all images within the dataloader
+                self.dataloader_iter = iter(self.dataloader)
+                self.image, self.target_class = next(self.dataloader_iter)
+
+            self.image = self.image.to(DEVICE)
+            self.target_class = self.target_class.to(DEVICE)
+            self.original_image = self.image.clone()
+
         if self.verbose:
             logging.info(f"Resetting environment with new image and target class: {self.target_class.item()}")
             logging.info(f"episode count: {self.episode_count}")
             logging.info(f"current_step: {self.current_step}")
+
         info = dict()
 
         return self.image, info

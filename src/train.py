@@ -16,30 +16,28 @@ SEED = 42
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
 parser.add_argument("--num_episodes", type=int, default=2, help="Number of episodes to run.")
-parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training.")
+parser.add_argument("--batch_size", type=int, default=50, help="Batch size for training.")
 parser.add_argument("--val_split", type=float, default=0.2, help="Holdout data for validation and testing.")
+parser.add_argument(
+    "--train_limit", type=int, default=100, help="Training dataloader limit - useful for debugging shorter runs."
+)
 args = parser.parse_args()
 
 episodes = args.num_episodes
 batch_size = args.batch_size
-val_split = args.batch_size
+val_split = args.val_split
+train_limit = args.train_limit
 
 
 if __name__ == "__main__":
     set_seed(SEED)
-
-    train_loader, valid_loader, test_loader = get_cifar_dataloaders(batch_size=1, val_split=val_split, seed=SEED)
-    episodes = 3
+    # this needs to be 1 - because each call to iter will return a single image
+    # and that's what the env expects
+    train_loader, valid_loader, test_loader = get_cifar_dataloaders(
+        batch_size=1, val_split=val_split, seed=SEED, train_limit=train_limit
+    )
     steps_per_episode = len(train_loader)  # number of images to perturb per episode
     total_timesteps = episodes * steps_per_episode
-
-    logging.info(
-        f"""
-    size of train_loader: {len(train_loader)}
-    size of valid_loader: {len(valid_loader)}
-    size of test_loader: {len(test_loader)}
-    """
-    )
 
     # classififer
     model = load_model()
