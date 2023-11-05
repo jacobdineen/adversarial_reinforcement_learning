@@ -49,6 +49,26 @@ def set_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
+# this is a class that will return an iterator that will loop over the dataloader
+# this is necessary because we have a conditiion in the env where
+# the dataloader should be refreshed
+class EndlessDataLoader:
+    def __init__(self, dataloader):
+        self.dataloader = dataloader
+        self.iterator = iter(dataloader)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            data = next(self.iterator)
+        except StopIteration:
+            self.iterator = iter(self.dataloader)
+            data = next(self.iterator)
+        return data
+
+
 def get_cifar_dataloaders(
     batch_size: int = 32, val_split: float = 0.1, seed: int = 42, train_limit: int = None  # Add train_limit parameter
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:

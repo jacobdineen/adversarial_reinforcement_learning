@@ -156,13 +156,8 @@ class ImagePerturbEnv(gym.Env):
             self.current_step = 0
             self.episode_count += 1
 
-            try:
-                self.image, self.target_class = next(self.dataloader)
-            except StopIteration:
-                # Recreate the iterator and fetch the first item
-                # This happens when we exhaust all images within the dataloader
-                self.dataloader = iter(self.dataloader)
-                self.image, self.target_class = next(self.dataloader)
+            self.dataloader = iter(self.dataloader)
+            self.image, self.target_class = next(self.dataloader)
 
             self.image = self.image.to(DEVICE)
             self.target_class = self.target_class.to(DEVICE)

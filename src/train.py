@@ -7,7 +7,7 @@ from stable_baselines3 import PPO
 
 from src.env import ImagePerturbEnv
 from src.plotting import plot_rewards_and_cumulative
-from src.utils import get_cifar_dataloaders, load_model, set_seed
+from src.utils import EndlessDataLoader, get_cifar_dataloaders, load_model, set_seed
 
 logging.basicConfig(level=logging.INFO)
 
@@ -15,19 +15,27 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 SEED = 42
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
-parser.add_argument("--num_episodes", type=int, default=10, help="Number of episodes to run.")
+parser.add_argument("--num_episodes", type=int, default=20, help="Number of episodes to run.")
 parser.add_argument("--batch_size", type=int, default=100, help="Batch size for training.")
 parser.add_argument("--val_split", type=float, default=0.2, help="Holdout data for validation and testing.")
 parser.add_argument(
-    "--train_limit", type=int, default=10, help="Training dataloader limit - useful for debugging shorter runs."
+    "--train_limit", type=int, default=None, help="Training dataloader limit - useful for debugging shorter runs."
 )
+parser.add_argument("--verbose", type=bool, default=False, help="If you want environment logging to be verbose.")
+parser.add_argument("--prog_bar", type=bool, default=False, help="If you want to use tqdm for train loop.")
+
+
 args = parser.parse_args()
 
 episodes = args.num_episodes
 batch_size = args.batch_size
 val_split = args.val_split
 train_limit = args.train_limit
+verbose = args.verbose
+prog_bar = args.prog_bar
 
+
+# maybe batch size should be
 
 if __name__ == "__main__":
     set_seed(SEED)
@@ -43,11 +51,17 @@ if __name__ == "__main__":
     model = load_model()
 
     # env
-    env = ImagePerturbEnv(dataloader=train_loader, model=model, steps_per_episode=steps_per_episode, verbose=True)
+    # Note the EndlessDataLoader wrapper
+    # This is to ensure that when a dataloader has been exhausted, it is refreshed
+    # by starting from the beginning
+    env = ImagePerturbEnv(
+        dataloader=EndlessDataLoader(train_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
+    )
 
     # Training here
     model = PPO("MlpPolicy", env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=batch_size)
-    model.learn(total_timesteps=total_timesteps, progress_bar=True)
+    logging.info(f"model device: {model.device}")
+    model.learn(total_timesteps=total_timesteps, progress_bar=prog_bar)
 
     ep_info_buffer = model.ep_info_buffer
     print(ep_info_buffer)
