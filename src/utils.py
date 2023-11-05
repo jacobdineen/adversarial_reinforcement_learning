@@ -61,6 +61,9 @@ class EndlessDataLoader:
         return self
 
     def __next__(self):
+        # Note the try-catch here
+        # if we try to call next on a depleted iterator, it will raise a StopIteration
+        # this iterator will catch that and refresh the iterator
         try:
             data = next(self.iterator)
         except StopIteration:
