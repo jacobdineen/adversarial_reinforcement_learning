@@ -16,19 +16,19 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 SEED = 42
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
-parser.add_argument("--num_episodes", type=int, default=30, help="Number of episodes to run.")
-parser.add_argument("--batch_size", type=int, default=200, help="Batch size for training.")
+parser.add_argument("--num_episodes", type=int, default=20, help="Number of episodes to run.")
+parser.add_argument("--batch_size", type=int, default=100, help="Batch size for training.")
 parser.add_argument("--val_split", type=float, default=0.2, help="Holdout data for validation and testing.")
 parser.add_argument(
-    "--train_limit", type=int, default=None, help="Training dataloader limit - useful for debugging shorter runs."
+    "--train_limit", type=int, default=1000, help="Training dataloader limit - useful for debugging shorter runs."
 )
-parser.add_argument("--verbose", type=bool, default=False, help="If you want environment logging to be verbose.")
+parser.add_argument("--verbose", type=bool, default=True, help="If you want environment logging to be verbose.")
 parser.add_argument("--prog_bar", type=bool, default=True, help="If you want to use tqdm for train loop.")
 parser.add_argument(
     "--model_save_path", type=str, default="src/model_weights/ppo", help="Where to save trained PPO model"
 )
 parser.add_argument(
-    "--model_performance_save_path", type=str, default="src/model_weights/ppo", help="Where to save ep info buff"
+    "--model_performance_save_path", type=str, default="src/ppo_performance", help="Where to save ep info buff"
 )
 
 args = parser.parse_args()
@@ -41,6 +41,20 @@ verbose = args.verbose
 prog_bar = args.prog_bar
 model_save_path = args.model_save_path
 model_performance_save_path = args.model_performance_save_path
+
+
+def make_env(rank, seed=SEED):
+    def _init():
+        env = ImagePerturbEnv(
+            dataloader=EndlessDataLoader(train_loader),
+            model=model,
+            steps_per_episode=steps_per_episode,
+            verbose=verbose,
+        )
+        env.seed(seed + rank)
+        return env
+
+    return _init
 
 
 # maybe batch size should be
@@ -95,4 +109,3 @@ if __name__ == "__main__":
     logging.info(f"Dataframe saved to {model_performance_save_path}")
 
     plot_rewards_and_cumulative(rewards)
-

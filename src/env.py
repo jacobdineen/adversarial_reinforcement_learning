@@ -105,13 +105,13 @@ class ImagePerturbEnv(gym.Env):
         reward = self.compute_reward(self.image, perturbed_image)
 
         # Increment the step counter and check if the episode should end
+        # this will trigger a reset, else we just want to sample the next image
+        # and try to attack that
         self.current_step += 1
         done = self.current_step >= self.steps_per_episode
 
         # should grab a new image after each step
         self.image, self.target_class = next(self.dataloader)
-
-        # Only set done to True after steps_per_episode steps
         return perturbed_image, reward, done, False, {}
 
     def compute_reward(self, original_image: torch.Tensor, perturbed_image: torch.Tensor) -> float:
@@ -135,7 +135,7 @@ class ImagePerturbEnv(gym.Env):
 
         original_prob = max(original_prob, 1e-8)  # for underflow issues
         reward = original_prob - perturbed_prob
-        return reward
+        return max(reward, 1e-8)  # for underflow issues
 
     def reset(self, seed: int | None = None) -> tuple[torch.Tensor, dict]:
         """
@@ -163,12 +163,9 @@ class ImagePerturbEnv(gym.Env):
             self.original_image = self.image.clone()
 
             if self.verbose:
-                logging.info(f"New data fetched successfully. Image target class: {self.target_class.item()}")
-
-        if self.verbose:
-            logging.info(f"Resetting environment with new image and target class: {self.target_class.item()}")
-            logging.info(f"episode count: {self.episode_count}")
-            logging.info(f"current_step: {self.current_step}")
+                logging.info(f"Resetting environment with new refreshed dataloader")
+                logging.info(f"episode count: {self.episode_count}")
+                logging.info(f"current_step: {self.current_step}")
 
         info = dict()
 
