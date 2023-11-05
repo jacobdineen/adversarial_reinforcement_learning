@@ -40,9 +40,9 @@ class ImagePerturbEnv(gym.Env):
         self,
         dataloader: Any,
         model: torch.nn.Module,
-        lambda_: float = 1.0,
         steps_per_episode: int = 100,
         verbose: bool = False,
+        seed: int | None = None,
     ):
         """
         Initialize the environment.
@@ -64,12 +64,11 @@ class ImagePerturbEnv(gym.Env):
         total_actions = self.image_shape[2] * self.image_shape[3]
         self.action_space = spaces.Discrete(total_actions)
         self.observation_space = spaces.Box(low=0, high=1, shape=self.image_shape, dtype=np.float32)
-        self.lambda_ = lambda_
-        self.image_counter = 0
         self.steps_per_episode = steps_per_episode
         self.current_step = 0
         self.episode_count = 0
         self.verbose = verbose
+        self.seed = seed
 
         logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
         logging.info(f"Action Space Size: {total_actions}")
@@ -109,8 +108,8 @@ class ImagePerturbEnv(gym.Env):
         self.current_step += 1
         done = self.current_step >= self.steps_per_episode
 
-        # Reset the environment (sample new image) after each step
-        # self.reset()
+        # should grab a new image after each step
+        self.image, self.target_class = next(self.dataloader)
 
         # Only set done to True after steps_per_episode steps
         return perturbed_image, reward, done, False, {}
