@@ -96,30 +96,3 @@ if __name__ == "__main__":
 
     plot_rewards_and_cumulative(rewards)
 
-    # Note the below
-    # I want to integrate something like this
-    # like after we train an for an episode (steps_per_episode), we evaluate the model on the validation env / valid_loader
-    """
-    from stable_baselines3.common.evaluation import evaluate_policy
-
-    # Determine how often you want to perform validation
-    eval_freq = 1000  # perform validation every 1000 timesteps
-    n_eval_episodes = 10  # number of episodes to evaluate
-    model_save_path = "/path/to/your/model.zip"
-
-    # Create a separate validation environment
-    valid_env = ImagePerturbEnv(dataloader=valid_loader, model=load_model(), steps_per_episode=steps_per_episode, verbose=True)
-
-    # Training loop with periodic validation
-    for i in range(0, total_timesteps, eval_freq):
-        # Train the model for `eval_freq` steps
-        model.learn(total_timesteps=eval_freq, reset_num_timesteps=False)
-
-        # Evaluate the model on the validation environment
-        mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=n_eval_episodes)
-        logging.info(f"Validation results: Mean reward: {mean_reward} +/- {std_reward}")
-
-        # Save the model periodically
-        model.save(f"{model_save_path}_step{i}")
-
-    """
