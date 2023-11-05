@@ -21,15 +21,15 @@ pip install -e .  # install this module in editable mode
 # train resnet on cifar 10
 python src/Resnet_18_train.py
 
-# testing inference on trained resnet model
-python src/Resnet_18_inference.py
-
-# dry run of env
-python src/env.py
-
-
-# train rl agent
-python src/train.py
+# train PPO agent calling custom env
+python src/train.py [-h] [--num_episodes NUM_EPISODES] 
+                         [--batch_size BATCH_SIZE] 
+                         [--val_split VAL_SPLIT]
+                         [--train_limit TRAIN_LIMIT] 
+                         [--verbose VERBOSE] 
+                         [--prog_bar PROG_BAR]
+                         [--model_save_path MODEL_SAVE_PATH]
+                         [--model_performance_save_path MODEL_PERFORMANCE_SAVE_PATH]
 
 
 ```
