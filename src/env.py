@@ -135,7 +135,7 @@ class ImagePerturbEnv(gym.Env):
 
         original_prob = max(original_prob, 1e-8)  # for underflow issues
         reward = original_prob - perturbed_prob
-        return max(reward, 1e-8)  # for underflow issues
+        return reward
 
     def reset(self, seed: int | None = None) -> tuple[torch.Tensor, dict]:
         """
