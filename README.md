@@ -18,15 +18,20 @@ pip install -e .  # install this module in editable mode
 
 # Common commands
 ```python
-# train resnet on cifar 10
-python src/Resnet_18_train.py
+# train resnet on dataset
+python src/image_classification_train.py [-h]
+                                         [--batch_size BATCH_SIZE]
+                                         [--num_epochs NUM_EPOCHS]
+                                         dataset_name # mnist or cifar
+                                         location_path
 
 # train PPO agent calling custom env
-python src/train.py [-h] [--num_episodes NUM_EPISODES] 
-                         [--batch_size BATCH_SIZE] 
+python src/train.py [-h] [--dataset_name DATASET_NAME]  # mnist or cifar
+                         [--num_episodes NUM_EPISODES]
+                         [--batch_size BATCH_SIZE]
                          [--val_split VAL_SPLIT]
-                         [--train_limit TRAIN_LIMIT] 
-                         [--verbose VERBOSE] 
+                         [--train_limit TRAIN_LIMIT]
+                         [--verbose VERBOSE]
                          [--prog_bar PROG_BAR]
                          [--model_save_path MODEL_SAVE_PATH]
                          [--model_performance_save_path MODEL_PERFORMANCE_SAVE_PATH]

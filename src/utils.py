@@ -9,28 +9,36 @@ from typing import Tuple
 import numpy as np
 import torch
 from PIL import Image
+from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import transforms
-from torchvision.datasets import CIFAR10
-
-from src.classifiers import ResidualBlock, ResNet
+from torchvision.datasets import CIFAR10, MNIST
+from torchvision.models import resnet18
 
 logging.basicConfig(level=logging.INFO)
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def load_model() -> ResNet:
+def load_model(dataset_name) -> resnet18:
     """
-    Load a pre-trained ResNet model for CIFAR-10 dataset.
+    Load a pre-trained ResNet model for CIFAR-10 or MNIST dataset.
 
     Returns:
         ResNet: The loaded ResNet model.
     """
-    model = ResNet(ResidualBlock, [3, 4, 6, 3]).to(DEVICE)
-    model.load_state_dict(torch.load("src/model_weights/resnet_cifar-10.pth", map_location=DEVICE))
-    logging.info(f"Resnet model loaded successfully on device: {DEVICE}")
+
+    model = resnet18(num_classes=10)
+
+    if dataset_name == "cifar":
+        model = resnet18(num_classes=10)
+        model.load_state_dict(torch.load("src/model_weights/cifar.pth", map_location=DEVICE))
+    elif dataset_name == "mnist":
+        model = resnet18(num_classes=10)
+        model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        model.load_state_dict(torch.load("src/model_weights/mnist.pth", map_location=DEVICE))
+    logging.info(f"Resnet {dataset_name} model loaded successfully on device: {DEVICE}")
     return model
 
 
@@ -72,8 +80,12 @@ class EndlessDataLoader:
         return data
 
 
-def get_cifar_dataloaders(
-    batch_size: int = 32, val_split: float = 0.1, seed: int = 42, train_limit: int = None  # Add train_limit parameter
+def get_dataloaders(
+    dataset_name,
+    batch_size: int = 32,
+    val_split: float = 0.1,
+    seed: int = 42,
+    train_limit: int = None,  # Add train_limit parameter
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:
     """
     Get data loaders for the CIFAR-10 dataset, split into training, validation, and test sets.
@@ -89,15 +101,26 @@ def get_cifar_dataloaders(
     """
     set_seed(seed)  # Your set_seed function needs to be defined elsewhere
 
-    transform_chain = transforms.Compose(
+    transform = transforms.Compose(
         [
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
+            transforms.ToTensor(),  # Converts PIL image or numpy.ndarray to tensor
+            transforms.Normalize((0.5,), (0.5,)),  # Normalize the data
         ]
     )
+    if dataset_name == "cifar":
+        transform = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+            ]
+        )
 
-    full_train_dataset = CIFAR10(root="./data", train=True, download=True, transform=transform_chain)
-    test_dataset = CIFAR10(root="./data", train=False, download=True, transform=transform_chain)
+        full_train_dataset = CIFAR10(root="./data", train=True, download=True, transform=transform)
+        test_dataset = CIFAR10(root="./data", train=False, download=True, transform=transform)
+
+    elif dataset_name == "mnist":
+        full_train_dataset = MNIST(root="./data", train=True, download=True, transform=transform)
+        test_dataset = MNIST(root="./data", train=False, download=True, transform=transform)
 
     num_train = len(full_train_dataset)
     indices = list(range(num_train))
@@ -121,6 +144,7 @@ def get_cifar_dataloaders(
 
     logging.info(
         f"""
+    Returning dataloaders for dataset: {dataset_name}
     size of train_loader: {len(train_loader)}
     size of valid_loader: {len(valid_loader)}
     size of test_loader: {len(test_loader)}
