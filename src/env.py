@@ -43,6 +43,7 @@ class ImagePerturbEnv(gym.Env):
         steps_per_episode: int = 100,
         verbose: bool = False,
         seed: int | None = None,
+        patch_size: int = 5,  # Define the size of the patch to perturb
     ):
         """
         Initialize the environment.
@@ -61,8 +62,14 @@ class ImagePerturbEnv(gym.Env):
         self.target_class = self.target_class.to(DEVICE)
         self.original_image = self.image.clone()  # Save the original image
         self.image_shape = self.image.shape  # torch.Size([1, 3, 224, 224]) for cifar
-        total_actions = self.image_shape[2] * self.image_shape[3]
-        self.action_space = spaces.Discrete(total_actions)
+        # total_actions = self.image_shape[2] * self.image_shape[3]
+        self.patch_size = patch_size
+        self.patch_area = patch_size * patch_size
+        # Calculate the number of patches that can fit in the image
+        self.num_patches_x = self.image_shape[2] // patch_size
+        self.num_patches_y = self.image_shape[3] // patch_size
+        total_patches = self.num_patches_x * self.num_patches_y
+        self.action_space = spaces.Discrete(total_patches)
         self.observation_space = spaces.Box(low=0, high=1, shape=self.image_shape, dtype=np.float32)
         self.steps_per_episode = steps_per_episode
         self.current_step = 0
@@ -71,7 +78,7 @@ class ImagePerturbEnv(gym.Env):
         self.seed = seed
 
         logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
-        logging.info(f"Action Space Size: {total_actions}")
+        logging.info(f"Action Space Size: {self.action_space}")
         logging.info(f"Observation Space Shape: {self.observation_space.shape}")
         logging.info(f"Initial Image Shape: {self.image_shape}")
 
@@ -94,13 +101,12 @@ class ImagePerturbEnv(gym.Env):
         """
         perturbed_image = self.image.clone().to(DEVICE)
 
-        channel, temp = divmod(
-            action, self.image_shape[2] * self.image_shape[3]
-        )  # channel, x*y coordinates in the image
-        x, y = divmod(temp, self.image_shape[3])  # x, y coordinates in the image
-        # perturbed_image[0, channel, x, y] = 0  # perturb the image by setting the pixel to 0
-        for channel in range(self.image_shape[1]):
-            perturbed_image[0, channel, x, y] = 0
+        # Calculate patch coordinates
+        patch_x = (action % self.num_patches_x) * self.patch_size
+        patch_y = (action // self.num_patches_x) * self.patch_size
+
+        # Perturb the patch of the image
+        perturbed_image[:, :, patch_x : patch_x + self.patch_size, patch_y : patch_y + self.patch_size] = 0
 
         reward = self.compute_reward(self.image, perturbed_image)
 
