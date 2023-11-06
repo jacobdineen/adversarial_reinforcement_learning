@@ -18,13 +18,13 @@ SEED = 42
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
 parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
 
-parser.add_argument("--num_episodes", type=int, default=20, help="Number of episodes to run.")
-parser.add_argument("--batch_size", type=int, default=100, help="Batch size for training.")
+parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run.")
+parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training.")
 parser.add_argument("--val_split", type=float, default=0.2, help="Holdout data for validation and testing.")
 parser.add_argument(
-    "--train_limit", type=int, default=1000, help="Training dataloader limit - useful for debugging shorter runs."
+    "--train_limit", type=int, default=None, help="Training dataloader limit - useful for debugging shorter runs."
 )
-parser.add_argument("--verbose", type=bool, default=True, help="If you want environment logging to be verbose.")
+parser.add_argument("--verbose", type=bool, default=False, help="If you want environment logging to be verbose.")
 parser.add_argument("--prog_bar", type=bool, default=True, help="If you want to use tqdm for train loop.")
 parser.add_argument(
     "--model_save_path", type=str, default="src/model_weights/ppo", help="Where to save trained PPO model"
