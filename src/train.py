@@ -71,6 +71,9 @@ parser.add_argument(
 parser.add_argument("--verbose", type=bool, default=False, help="If you want environment logging to be verbose.")
 parser.add_argument("--prog_bar", type=bool, default=True, help="If you want to use tqdm for train loop.")
 parser.add_argument(
+    "--model_save_path", type=str, default="src/model_weights/ppo", help="Where to save trained PPO model"
+)
+parser.add_argument(
     "--model_performance_save_path", type=str, default="src/ppo_performance", help="Where to save ep info buff"
 )
 
