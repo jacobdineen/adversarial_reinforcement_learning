@@ -6,12 +6,19 @@ import pandas as pd
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.logger import configure
 from stable_baselines3.common.evaluation import evaluate_policy
+import matplotlib.pyplot as plt
+
 
 
 from src.env import ImagePerturbEnv
-from src.plotting import plot_rewards_and_cumulative
+from src.plotting import plot_rewards_and_cumulative, plot_selected_columns_from_csv
 from src.utils import EndlessDataLoader, get_dataloaders, load_model, set_seed
+
+# This is to redirect the logging output to a file
+LOGGING_OUTPUT_PATH = "./src/logs/sb3_log/"
+new_logger = configure(LOGGING_OUTPUT_PATH, ["stdout", "csv"])
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,6 +33,8 @@ class RewardLoggerCallback(BaseCallback):
         self.all_rewards = []
         self.all_lengths = []
         self.all_times = []
+        self.policy_gradient_losses = []
+        self.value_losses = []
 
     def _on_step(self) -> bool:
         # Check if it's time to log episode information
@@ -38,11 +47,16 @@ class RewardLoggerCallback(BaseCallback):
                 self.all_rewards.append(info["r"])
                 self.all_lengths.append(info["l"])
                 self.all_times.append(info["t"])
+
         return True
 
-    def get_episode_info(self):
-        """Retrieve the episode information."""
-        return {"rewards": self.all_rewards, "lengths": self.all_lengths, "times": self.all_times}
+    def get_training_info(self):
+        """Retrieve the training information."""
+        return {
+            "rewards": self.all_rewards,
+            "lengths": self.all_lengths,
+            "times": self.all_times,
+        }
 
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
@@ -80,6 +94,8 @@ if __name__ == "__main__":
     # this needs to be 1 - because each call to iter will return a single image
     # and that's what the env expects
     # This is highly seeded to return the same batches every run
+
+   
     train_loader, valid_loader, test_loader = get_dataloaders(
         dataset_name=dataset_name, batch_size=1, val_split=val_split, seed=SEED, train_limit=train_limit
     )
@@ -97,44 +113,37 @@ if __name__ == "__main__":
     train_env = ImagePerturbEnv(
         dataloader=EndlessDataLoader(train_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
     )
-        #     dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
-    # )
-
+    # eventually use this for validation
     valid_env = ImagePerturbEnv(
         dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
     )
-# callback necessary because defaults to last 100 episodes
-callback = RewardLoggerCallback(check_freq=steps_per_episode)
-model = PPO("MlpPolicy", train_env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=batch_size)
-logging.info(f"model device: {model.device}")
 
-eval_freq = 1000  # Adjust this based on your training regime
-n_eval_episodes = 10  # The number of episodes to evaluate
-
-for i in range(0, total_timesteps, eval_freq):
-    model.learn(total_timesteps=eval_freq, reset_num_timesteps=False)
-    
-    # Evaluate the model on the validation environment
-    mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=n_eval_episodes)
-    logging.info(f"Validation results: Mean reward: {mean_reward} +/- {std_reward}")
-
-    # Save the model periodically
-    model.save(f"{model_save_path}_step{i}")
     # Training here
     # callback necessary because defaults to last 100 episodes
     callback = RewardLoggerCallback(check_freq=steps_per_episode)
     model = PPO("MlpPolicy", train_env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=batch_size)
+    model.set_logger(new_logger)
     logging.info(f"model device: {model.device}")
     model.learn(total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback)
     logging.info("Training complete.")
     logging.info(f"Saving model to {model_save_path}")
     model.save(model_save_path)
 
-    episode_info = callback.get_episode_info()
+#     valid_env = ImagePerturbEnv(
+#     dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
+# )
+
+# Evaluate the policy with the validation environment
+    mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=10)
+    logging.info(f'Validation results: Mean reward: {mean_reward} +/- {std_reward}')
+
+
+    episode_info = callback.get_training_info()
     df = pd.DataFrame(episode_info)
     df.rename(columns={"rewards": "rewards", "lengths": "lengths", "times": "times"}, inplace=True)
     df.to_csv(f"{model_performance_save_path}.csv")
     logging.info(f"Dataframe saved to {model_performance_save_path}")
 
     # If `plot_rewards_and_cumulative` requires just the rewards, you can extract them
-    plot_rewards_and_cumulative(df["rewards"])
+    plot_selected_columns_from_csv(f"{LOGGING_OUTPUT_PATH}/progress.csv")
+    plot_rewards_and_cumulative(df["rewards"])  
