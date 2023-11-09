@@ -10,7 +10,6 @@ from stable_baselines3.common.logger import configure
 from stable_baselines3.common.evaluation import evaluate_policy
 import matplotlib.pyplot as plt
 from env import *
-# from env import ImagePerturbEnv
 
 
 from src.env import ImagePerturbEnv
@@ -67,7 +66,6 @@ reward_functions = {
     "reward_five": reward_composite,
     "reward_six": reward_output_difference,
     "reward_seven": reward_target_prob_inversion,
-    "reward_eight": reward_top_k_misclassification,
 }
 
 

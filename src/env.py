@@ -271,10 +271,6 @@ def reward_target_prob_inversion(self, **kwargs ):
         perturbed_prob = kwargs.get('perturbed_prob')
         return 1.0 - perturbed_prob
 
-def reward_top_k_misclassification(self, perturbed_output,original_output=None, current_step=None ):
-        perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
-        return 1.0 - perturbed_prob
-
 # if __name__ == "__main__":
 #     # This is mainly just for testing
 #     # but can likely be lifted for other parts of the codebase
