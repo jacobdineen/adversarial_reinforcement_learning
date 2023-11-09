@@ -1,42 +1,45 @@
-import torch
-import torch.nn as nn
-import utils
+# -*- coding: utf-8 -*-
+# pylint: disable-all
 import itertools
+
+import numpy as np
+import sklearn
+import torch
+from sklearn.utils import shuffle
+from torch import nn
 from torchvision.datasets import MNIST
-import sklearn.utils
 from tqdm import tqdm
 
-import torchsummary
-import numpy as np
+import utils
 
-def get_cnn_model(input_shape = None) -> nn.Sequential:
+# Check if CUDA is available and set the device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def get_cnn_model(input_shape) -> nn.Sequential:
     channel_count = input_shape[0]
-
     model = nn.Sequential(
-        nn.Conv2d(channel_count, 64, kernel_size=(5, 5), padding="same"),
+        nn.Conv2d(channel_count, 64, kernel_size=(5, 5), padding="same").to(device),
         nn.ReLU(),
         nn.Dropout(0.5),
-
-        nn.Conv2d(64, 64, kernel_size=(5, 5), padding="same"),
+        nn.Conv2d(64, 64, kernel_size=(5, 5), padding="same").to(device),
         nn.ReLU(),
         nn.Dropout(0.5),
-
         nn.Flatten(),
-        nn.Linear(64 * input_shape[1] * input_shape[2], 128),
-        nn.ReLU()
-    )
+        nn.Linear(64 * input_shape[1] * input_shape[2], 128).to(device),
+        nn.ReLU(),
+    ).to(device)
     return model
 
-def get_dnn_model(number_of_class_labels = 10) -> nn.Sequential:
-    model = nn.Sequential(
-        nn.Linear(number_of_class_labels, 128),
-        nn.ReLU()
-    )
+
+def get_dnn_model(number_of_class_labels) -> nn.Sequential:
+    model = nn.Sequential(nn.Linear(number_of_class_labels, 128).to(device), nn.ReLU()).to(device)
     return model
+
 
 class QModel(nn.Module):
     def __init__(self, cnn_model, dnn_model, blocks):
-        super(QModel, self).__init__()
+        super().__init__()
         self.cnn_model = cnn_model
         self.dnn_model = dnn_model
         self.blocks = blocks
@@ -45,23 +48,32 @@ class QModel(nn.Module):
         image_representation = self.cnn_model(image_input)
         probability_representation = self.dnn_model(probability_input)
         x = torch.cat((probability_representation, image_representation), dim=-1)
-        x = nn.Linear(256, len(self.blocks))(x)
+        x = nn.Linear(256, len(self.blocks)).to(device)(x)
         return x
 
-def update_q_model(experience_replay: list[tuple], q_model: QModel, batch_size: int, discount_factor: float):
+
+def update_q_model(experience_replay, q_model, batch_size, discount_factor):
+    q_model.train()
+    q_model_optimizer = torch.optim.Adam(q_model.parameters(), lr=0.0001)
 
     train_input_1 = []
     train_input_2 = []
-
     train_label = []
-    for index, experience in enumerate(experience_replay):
+    for experience in shuffle(experience_replay, random_state=0)[:batch_size]:
+        (
+            sample_image,
+            sample_image_probability,
+            action,
+            reward,
+            sample_image_noise,
+            sample_image_noise_probability,
+        ) = experience
 
-        (sample_image, sample_image_probability, action, reward, sample_image_noise, sample_image_noise_probability) = experience
-        
-        initial_image_state: torch.Tensor = sample_image
-        initial_image_probability_state: torch.Tensor = sample_image_probability
-        next_image_state: torch.Tensor = sample_image_noise
-        next_image_probability_state: torch.Tensor = sample_image_noise_probability
+        # Move tensors to the device
+        initial_image_state = sample_image.to(device)
+        initial_image_probability_state = sample_image_probability.to(device)
+        next_image_state = sample_image_noise.to(device)
+        next_image_probability_state = sample_image_noise_probability.to(device)
 
         action_taken: int = action
         reward_obtained: float = reward
@@ -97,7 +109,9 @@ def update_q_model(experience_replay: list[tuple], q_model: QModel, batch_size: 
         # print(train_input_1.shape)
         # input()
 
-    train_input_1, train_input_2, train_label = sklearn.utils.shuffle(train_input_1, train_input_2, train_label, random_state = 0)
+    train_input_1, train_input_2, train_label = sklearn.utils.shuffle(
+        train_input_1, train_input_2, train_label, random_state=0
+    )
 
     # print(f"Q Model Update")
     q_model.train()
@@ -123,12 +137,13 @@ def update_q_model(experience_replay: list[tuple], q_model: QModel, batch_size: 
     loss = nn.MSELoss()(prediction, label_batch)
     loss.backward()
     q_model_optimizer.step()
-    
+
     return q_model
 
-def main():
 
+def main():
     mnist_model = utils.load_model("mnist")
+    mnist_model.to(device)
     mnist_model.eval()
 
     mnist = MNIST("data", download=True, train=True)
@@ -153,8 +168,8 @@ def main():
     # input(torchsummary.summary(cnn_model, input_shape))
     # input(torchsummary.summary(dnn_model, (class_label_count,)))
 
-    image_input = torch.zeros((1, *input_shape))
-    probability_input = torch.zeros((1, class_label_count))
+    image_input = torch.zeros((1, *input_shape)).to(device)
+    probability_input = torch.zeros((1, class_label_count)).to(device)
 
     # input(probability_input.shape)
     # input(image_input.shape)
@@ -165,31 +180,15 @@ def main():
     # input(image_representation.shape)
     # input(probability_representation.shape)
 
-    x = torch.cat((probability_representation, image_representation), dim=-1)
+    x = torch.cat((probability_representation, image_representation), dim=-1).to(device)
 
     # input(x.shape)
 
-    """
-    input_1 (InputLayer)        [(None, 10)]                 0         []
-
-    input_2 (InputLayer)        [(None, 28, 28, 1)]          0         []
-
-    sequential_2 (Sequential)   (None, 128)                  1408      ['input_1[0][0]']
-
-    sequential_1 (Sequential)   (None, 128)                  6526784   ['input_2[0][0]']
-
-    concatenate (Concatenate)   (None, 256)                  0         ['sequential_2[0][0]',
-                                                                        'sequential_1[0][0]']
-
-    dense_2 (Dense)             (None, 196)                  50372     ['concatenate[0][0]']
-    """
-
-    x = nn.Linear(256, len(blocks))(x)
+    x = nn.Linear(256, len(blocks)).to(device)(x)
 
     # input(x.shape)
-        
-    q_model = QModel(cnn_model, dnn_model, blocks)
 
+    q_model = QModel(cnn_model, dnn_model, blocks).to(device)
     print(q_model)
 
     epsilon = 0.9
@@ -205,8 +204,7 @@ def main():
     GAME_COUNT = 5000
 
     for game_number in tqdm(range(GAME_COUNT)):
-        
-        sample_image = X_test[game_number]
+        sample_image = X_test[game_number].to(device)
         sample_image = sample_image.unsqueeze(0)
 
         sample_image = sample_image.float()
@@ -219,7 +217,7 @@ def main():
 
         predicted_label_distribution = mnist_model(sample_image.unsqueeze(0))
         original_predicted_label = torch.argmax(predicted_label_distribution, dim=1)
-        original_image = np.array(sample_image)
+        # original_image = np.array(sample_image)
 
         # print(sample_image.shape)
         # print(predicted_label_distribution.shape)
@@ -244,9 +242,11 @@ def main():
             attack_region = torch.zeros(input_shape)
             # input(attack_region.shape)
             attack_coord = blocks[action]
-            attack_region[0, attack_coord[0] : attack_coord[0] + block_size, attack_coord[1] : attack_coord[1] + block_size] = 1
+            attack_region[
+                0, attack_coord[0] : attack_coord[0] + block_size, attack_coord[1] : attack_coord[1] + block_size
+            ] = 1
 
-            sample_image_noise = sample_image + (attack_region * LAMBDA)
+            sample_image_noise = sample_image + (attack_region * LAMBDA).to(device)
             sample_image_noise_probability = mnist_model(sample_image_noise.unsqueeze(0))
             # input(sample_image_noise_probability.shape)
 
@@ -259,13 +259,27 @@ def main():
 
                 reward = 10.0
                 success.append(1)
-                experience = (sample_image, sample_image_probability, action, reward, sample_image_noise, sample_image_noise_probability)
+                experience = (
+                    sample_image,
+                    sample_image_probability,
+                    action,
+                    reward,
+                    sample_image_noise,
+                    sample_image_noise_probability,
+                )
                 experience_replay.append(experience)
                 break
 
             else:
                 reward = -0.1
-                experience = (sample_image, sample_image_probability, action, reward, sample_image_noise, sample_image_noise_probability)
+                experience = (
+                    sample_image,
+                    sample_image_probability,
+                    action,
+                    reward,
+                    sample_image_noise,
+                    sample_image_noise_probability,
+                )
                 experience_replay.append(experience)
 
             sample_image = sample_image_noise
@@ -276,7 +290,14 @@ def main():
 
             reward = -1.0
             success.append(0)
-            experience = (sample_image, sample_image_probability, action, reward, sample_image_noise, sample_image_noise_probability)
+            experience = (
+                sample_image,
+                sample_image_probability,
+                action,
+                reward,
+                sample_image_noise,
+                sample_image_noise_probability,
+            )
             experience_replay.append(experience)
 
         if len(experience_replay) > max_buffer_size:
