@@ -188,19 +188,6 @@ class ImagePerturbEnv(gym.Env):
 
         return self.image, info
 
-          
-def reward_distance(self, **kwargs):
-    original_output = kwargs.get('original_output')
-    perturbed_output = kwargs.get('perturbed_output')
-    norm_type = kwargs.get('norm_type', 2)  # Default to L2 norm if not provided
-    
-    if original_output is None or perturbed_output is None:
-        raise ValueError("reward_distance requires 'original_output' and 'perturbed_output'.")
-    
-    distance = torch.norm(original_output - perturbed_output, p=norm_type)
-    return distance.item()
-
-
 
 def reward_improvement(self, **kwargs):
     original_prob = kwargs.get('original_prob')
@@ -245,7 +232,7 @@ def reward_composite(self, **kwargs):
 
     # Call the component reward functions with kwargs
     improvement_reward = original_prob - perturbed_prob
-    time_penalty =     time_penalty = decay_rate * current_step
+    time_penalty =  decay_rate * current_step
     probs = F.softmax(perturbed_output, dim=1).squeeze()
     target_prob = probs[target_class].item()
     goal_reward=1.0 if target_prob < threshold else 0.0
@@ -270,6 +257,7 @@ def reward_target_prob_inversion(self, **kwargs ):
         
         perturbed_prob = kwargs.get('perturbed_prob')
         return 1.0 - perturbed_prob
+
 
 # if __name__ == "__main__":
 #     # This is mainly just for testing
