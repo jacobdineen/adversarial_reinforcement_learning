@@ -10,7 +10,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn.functional as F
-from gymnasium import spaces
+from gymnasium import spaces 
 
 logging.basicConfig(level=logging.INFO)
 
@@ -40,6 +40,7 @@ class ImagePerturbEnv(gym.Env):
         self,
         dataloader: Any,
         model: torch.nn.Module,
+        reward_func,
         steps_per_episode: int = 100,
         verbose: bool = False,
         seed: int | None = None,
@@ -69,6 +70,8 @@ class ImagePerturbEnv(gym.Env):
         self.episode_count = 0
         self.verbose = verbose
         self.seed = seed
+        self.reward_func = reward_func
+
 
         logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
         logging.info(f"Action Space Size: {total_actions}")
@@ -102,7 +105,7 @@ class ImagePerturbEnv(gym.Env):
         for channel in range(self.image_shape[1]):
             perturbed_image[0, channel, x, y] = 0
 
-        reward = self.compute_reward(self.image, perturbed_image)
+        # reward = self.compute_reward(self.image, perturbed_image)
 
         # Increment the step counter and check if the episode should end
         # this will trigger a reset, else we just want to sample the next image
@@ -110,11 +113,14 @@ class ImagePerturbEnv(gym.Env):
         self.current_step += 1
         done = self.current_step >= self.steps_per_episode
 
+        reward = self.compute_reward(self.image, perturbed_image,current_step=self.current_step)
+
+
         # should grab a new image after each step
         self.image, self.target_class = next(self.dataloader)
-        return perturbed_image, reward, done, False, {}
+        return perturbed_image, reward, done, False, {} 
 
-    def compute_reward(self, original_image: torch.Tensor, perturbed_image: torch.Tensor) -> float:
+    def compute_reward(self, original_image, perturbed_image, current_step):
         """_summary_
 
         Args:
@@ -133,9 +139,20 @@ class ImagePerturbEnv(gym.Env):
             perturbed_output = self.model(perturbed_image)
             perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
 
-        original_prob = max(original_prob, 1e-8)  # for underflow issues
-        reward = original_prob - perturbed_prob
+        reward_arguments = {
+            'original_output': original_output,
+            'perturbed_output': perturbed_output,
+            'original_prob': original_prob,
+            'perturbed_prob': perturbed_prob,
+            'current_step': current_step,
+            'target_class': self.target_class.item(), 
+           
+        }
+
+        reward = self.reward_func(self, **reward_arguments)
+
         return reward
+
 
     def reset(self, seed: int | None = None) -> tuple[torch.Tensor, dict]:
         """
@@ -171,6 +188,92 @@ class ImagePerturbEnv(gym.Env):
 
         return self.image, info
 
+          
+def reward_distance(self, **kwargs):
+    original_output = kwargs.get('original_output')
+    perturbed_output = kwargs.get('perturbed_output')
+    norm_type = kwargs.get('norm_type', 2)  # Default to L2 norm if not provided
+    
+    if original_output is None or perturbed_output is None:
+        raise ValueError("reward_distance requires 'original_output' and 'perturbed_output'.")
+    
+    distance = torch.norm(original_output - perturbed_output, p=norm_type)
+    return distance.item()
+
+
+
+def reward_improvement(self, **kwargs):
+    original_prob = kwargs.get('original_prob')
+    perturbed_prob = kwargs.get('perturbed_prob')
+    
+    return original_prob - perturbed_prob
+
+    
+def reward_time_decay(self, **kwargs):
+    # Extract the required arguments using kwargs.get and set defaults if not provided
+    original_prob = kwargs.get('original_prob', None)
+    perturbed_prob = kwargs.get('perturbed_prob', None)
+    current_step = kwargs.get('current_step', None)
+
+    # Decrease reward as time goes by to encourage faster completion
+    decay_rate = kwargs.get('decay_rate', 0.01)  # Default decay rate if not provided
+    time_penalty = decay_rate * current_step
+
+    return (original_prob - perturbed_prob) - time_penalty
+
+def reward_goal_achievement(self, **kwargs):
+    perturbed_output = kwargs.get('perturbed_output')
+    target_class = kwargs.get('target_class')
+    threshold = kwargs.get('threshold', 0.5)  # Default threshold if not provided
+    
+    probs = F.softmax(perturbed_output, dim=1).squeeze()
+    target_prob = probs[target_class].item()
+    return 1.0 if target_prob < threshold else 0.0
+
+
+    
+def reward_composite(self, **kwargs):
+    # Extract the necessary arguments for the component reward functions
+    original_prob= kwargs.get('original_prob')
+    perturbed_prob = kwargs.get('perturbed_prob')
+    current_step = kwargs.get('current_step')
+    decay_rate = kwargs.get('decay_rate', 0.01)  # Default decay rate if not provided
+    threshold = kwargs.get('threshold', 0.5)  # Default threshold if not provided
+    perturbed_output = kwargs.get('perturbed_output')
+    target_class = kwargs.get('target_class')
+
+
+    # Call the component reward functions with kwargs
+    improvement_reward = original_prob - perturbed_prob
+    time_penalty =     time_penalty = decay_rate * current_step
+    probs = F.softmax(perturbed_output, dim=1).squeeze()
+    target_prob = probs[target_class].item()
+    goal_reward=1.0 if target_prob < threshold else 0.0
+    # Combine the rewards to get the composite reward
+    composite_reward = improvement_reward + goal_reward - time_penalty
+    return composite_reward
+
+
+def reward_output_difference(self, **kwargs):
+    original_output = kwargs.get('original_output')
+    perturbed_output = kwargs.get('perturbed_output')
+    norm_type = kwargs.get('norm_type', 2)  # Default to L2 norm if not provided
+    
+    if original_output is None or perturbed_output is None:
+        raise ValueError("reward_output_difference requires 'original_output' and 'perturbed_output'.")
+    
+    diff = original_output - perturbed_output
+    return torch.norm(diff, p=norm_type) / original_output.numel()
+
+    
+def reward_target_prob_inversion(self, **kwargs ):
+        
+        perturbed_prob = kwargs.get('perturbed_prob')
+        return 1.0 - perturbed_prob
+
+def reward_top_k_misclassification(self, perturbed_output,original_output=None, current_step=None ):
+        perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
+        return 1.0 - perturbed_prob
 
 # if __name__ == "__main__":
 #     # This is mainly just for testing
