@@ -59,14 +59,22 @@ class RewardLoggerCallback(BaseCallback):
         }
 
 reward_functions = {
+    # Measures the change in the feature space caused by the perturbation.
     "reward_one": reward_distance,
+    # Calculates how much the perturbation reduces the classifier's confidence.
     "reward_two": reward_improvement,
+    # Similar to reward_improvement, but with a penalty for taking more steps.
     "reward_three": reward_time_decay,
+    # Checks if the perturbation leads to a successful misclassification.
     "reward_four": reward_goal_achievement,
+    # A composite reward combining several aspects of the perturbation task.
     "reward_five": reward_composite,
+    # Quantifies the alteration of the model's output due to the perturbation.
     "reward_six": reward_output_difference,
+    # Rewards the agent for decreasing the model's confidence in the correct class.
     "reward_seven": reward_target_prob_inversion,
 }
+
 
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
