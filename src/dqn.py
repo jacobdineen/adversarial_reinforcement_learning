@@ -11,6 +11,7 @@ from torchvision.datasets import MNIST
 from tqdm import tqdm
 
 import utils
+from src.classifiers import DQNDNN
 
 # Check if CUDA is available and set the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -142,7 +143,18 @@ def update_q_model(experience_replay, q_model, batch_size, discount_factor):
 
 
 def main():
-    mnist_model = utils.load_model("mnist")
+    mnist_model = DQNDNN()
+    # Load the state dictionary from the file
+    checkpoint = torch.load("src/model_weights/simple_mnist2.pth")
+
+    # Check if the loaded state dict is a dict and has the key 'state_dict'
+    if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
+        state_dict = checkpoint["state_dict"]
+    else:
+        state_dict = checkpoint
+
+    # Apply the state dictionary to the model
+    mnist_model.load_state_dict(state_dict)
     mnist_model.to(device)
     mnist_model.eval()
 
@@ -201,10 +213,10 @@ def main():
     success_rate = []
     experience_replay = []
 
-    GAME_COUNT = 5000
+    GAME_COUNT = 5000 * 10
 
     for game_number in tqdm(range(GAME_COUNT)):
-        sample_image = X_test[game_number].to(device)
+        sample_image = X_train[game_number].to(device)
         sample_image = sample_image.unsqueeze(0)
 
         sample_image = sample_image.float()
@@ -217,30 +229,17 @@ def main():
 
         predicted_label_distribution = mnist_model(sample_image.unsqueeze(0))
         original_predicted_label = torch.argmax(predicted_label_distribution, dim=1)
-        # original_image = np.array(sample_image)
-
-        # print(sample_image.shape)
-        # print(predicted_label_distribution.shape)
-        # print(original_predicted_label)
-        # print(original_image.shape)
-        # input()
 
         for iteration in range(0, max_blocks_attack):
             sample_image_probability = mnist_model(sample_image.unsqueeze(0))[0]
-            # print(sample_image_probability.shape)
             sample_image_probability = sample_image_probability.unsqueeze(0)
-            # print(sample_image_probability.shape)
-            # input()
 
             if np.random.rand() < epsilon:
-                # print("Exploration")
                 action = np.random.randint(0, len(blocks))
             else:
-                # print("Exploitation")
                 action = torch.argmax(q_model(sample_image.unsqueeze(0), sample_image_probability)).item()
 
             attack_region = torch.zeros(input_shape)
-            # input(attack_region.shape)
             attack_coord = blocks[action]
             attack_region[
                 0, attack_coord[0] : attack_coord[0] + block_size, attack_coord[1] : attack_coord[1] + block_size
@@ -248,15 +247,10 @@ def main():
 
             sample_image_noise = sample_image + (attack_region * LAMBDA).to(device)
             sample_image_noise_probability = mnist_model(sample_image_noise.unsqueeze(0))
-            # input(sample_image_noise_probability.shape)
 
-            # modified_predicted_label = torch.argmax(sample_image_noise_probability, dim=1)
             modified_predicted_label = torch.argmax(mnist_model(sample_image_noise.unsqueeze(0)), dim=1)
-            # input(modified_predicted_label.shape)
 
             if modified_predicted_label != original_predicted_label:
-                # print("Success")
-
                 reward = 10.0
                 success.append(1)
                 experience = (
