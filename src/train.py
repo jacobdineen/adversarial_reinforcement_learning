@@ -86,7 +86,7 @@ parser.add_argument(
 parser.add_argument(
     "--model_performance_save_path", type=str, default="src/ppo_performance", help="Where to save ep info buff"
 )
-parser.add_argument("--reward_func", type=str, choices=list(reward_functions.keys()), default='reward_one', help="The name of the reward function to use.")
+parser.add_argument("--reward_func", type=str, choices=list(reward_functions.keys()), default='reward_two', help="The name of the reward function to use.")
 
 
 args = parser.parse_args()
