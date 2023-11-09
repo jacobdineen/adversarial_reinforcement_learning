@@ -7,6 +7,10 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
+from stable_baselines3.common.evaluation import evaluate_policy
+import matplotlib.pyplot as plt
+from env import *
+
 
 from src.env import ImagePerturbEnv
 from src.plotting import plot_rewards_and_cumulative, plot_selected_columns_from_csv
@@ -54,6 +58,24 @@ class RewardLoggerCallback(BaseCallback):
             "times": self.all_times,
         }
 
+reward_functions = {
+    # Measures the change in the feature space caused by the perturbation.
+    "reward_one": reward_distance,
+    # Calculates how much the perturbation reduces the classifier's confidence.
+    "reward_two": reward_improvement,
+    # Similar to reward_improvement, but with a penalty for taking more steps.
+    "reward_three": reward_time_decay,
+    # Checks if the perturbation leads to a successful misclassification.
+    "reward_four": reward_goal_achievement,
+    # A composite reward combining several aspects of the perturbation task.
+    "reward_five": reward_composite,
+    # Quantifies the alteration of the model's output due to the perturbation.
+    "reward_six": reward_output_difference,
+    # Rewards the agent for decreasing the model's confidence in the correct class.
+    "reward_seven": reward_target_prob_inversion,
+}
+
+
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
 parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
@@ -72,6 +94,8 @@ parser.add_argument(
 parser.add_argument(
     "--model_performance_save_path", type=str, default="src/ppo_performance", help="Where to save ep info buff"
 )
+parser.add_argument("--reward_func", type=str, choices=list(reward_functions.keys()), default='reward_two', help="The name of the reward function to use.")
+
 
 args = parser.parse_args()
 
@@ -84,12 +108,16 @@ prog_bar = args.prog_bar
 model_save_path = args.model_save_path
 model_performance_save_path = args.model_performance_save_path
 dataset_name = args.dataset_name
+selected_reward_func = reward_functions[args.reward_func]
+
 
 if __name__ == "__main__":
     set_seed(SEED)
     # this needs to be 1 - because each call to iter will return a single image
     # and that's what the env expects
     # This is highly seeded to return the same batches every run
+
+   
     train_loader, valid_loader, test_loader = get_dataloaders(
         dataset_name=dataset_name, batch_size=1, val_split=val_split, seed=SEED, train_limit=train_limit
     )
@@ -100,17 +128,26 @@ if __name__ == "__main__":
     # classififer
     model = load_model(dataset_name=dataset_name)
 
+    #
+    env = ImagePerturbEnv(
+        dataloader=EndlessDataLoader(train_loader),
+        model=model,
+        reward_func=selected_reward_func,  # Pass the reward function here
+        steps_per_episode=steps_per_episode,
+        verbose=verbose
+    ) 
+
     # env
     # Note the EndlessDataLoader wrapper
     # This is to ensure that when a dataloader has been exhausted, it is refreshed
     # by starting from the beginning
     train_env = ImagePerturbEnv(
-        dataloader=EndlessDataLoader(train_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
+        dataloader=EndlessDataLoader(train_loader), model=model,reward_func=selected_reward_func, steps_per_episode=steps_per_episode, verbose=verbose
     )
     # eventually use this for validation
-    # valid_env = ImagePerturbEnv(
-    #     dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
-    # )
+    valid_env = ImagePerturbEnv(
+        dataloader=EndlessDataLoader(valid_loader), model=model, reward_func=selected_reward_func, steps_per_episode=steps_per_episode, verbose=verbose
+    )
 
     # Training here
     # callback necessary because defaults to last 100 episodes
@@ -123,6 +160,16 @@ if __name__ == "__main__":
     logging.info(f"Saving model to {model_save_path}")
     model.save(model_save_path)
 
+#     valid_env = ImagePerturbEnv(
+#     dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
+# )
+
+# Evaluate the policy with the validation environment
+    mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=10)
+    logging.info(f'Validation results: Mean reward: {mean_reward} +/- {std_reward}')
+    logging.info(f'Rewrd func calculated using{selected_reward_func}')
+
+
     episode_info = callback.get_training_info()
     df = pd.DataFrame(episode_info)
     df.rename(columns={"rewards": "rewards", "lengths": "lengths", "times": "times"}, inplace=True)
@@ -131,4 +178,6 @@ if __name__ == "__main__":
 
     # If `plot_rewards_and_cumulative` requires just the rewards, you can extract them
     plot_selected_columns_from_csv(f"{LOGGING_OUTPUT_PATH}/progress.csv")
-    plot_rewards_and_cumulative(df["rewards"])
+    plot_rewards_and_cumulative(df["rewards"]) 
+
+    
