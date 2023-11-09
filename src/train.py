@@ -159,6 +159,7 @@ if __name__ == "__main__":
 # Evaluate the policy with the validation environment
     mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=10)
     logging.info(f'Validation results: Mean reward: {mean_reward} +/- {std_reward}')
+    logging.info(f'Rewrd func calculated using{selected_reward_func}')
 
 
     episode_info = callback.get_training_info()

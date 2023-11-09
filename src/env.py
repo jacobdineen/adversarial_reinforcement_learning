@@ -188,6 +188,13 @@ class ImagePerturbEnv(gym.Env):
 
         return self.image, info
 
+def reward_distance(self, **kwargs):
+    original_output = kwargs.get('original_output')
+    perturbed_output = kwargs.get('perturbed_output')
+    norm_type = kwargs.get('norm_type', 2)  # Default to L2 norm if not provided
+    
+    distance = torch.norm(original_output - perturbed_output, p=norm_type)
+    return distance.item()
 
 def reward_improvement(self, **kwargs):
     original_prob = kwargs.get('original_prob')
