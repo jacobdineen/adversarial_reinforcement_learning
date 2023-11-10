@@ -168,7 +168,7 @@ def main():
 
     input_shape = (1, 28, 28)
     class_label_count = 10
-    LAMBDA = 0.4
+    LAMBDA = 1.0
 
     block_size = 2
     x_span = list(range(0, input_shape[1], block_size))
@@ -204,10 +204,10 @@ def main():
     print(q_model)
 
     epsilon = 0.9
-    batch_size = 32
+    batch_size = 64
     discount_factor = 0.9
     max_buffer_size = 1000
-    max_blocks_attack = 15
+    max_blocks_attack = 20
 
     success = []
     success_rate = []
@@ -251,6 +251,7 @@ def main():
             modified_predicted_label = torch.argmax(mnist_model(sample_image_noise.unsqueeze(0)), dim=1)
 
             if modified_predicted_label != original_predicted_label:
+                print("here")
                 reward = 10.0
                 success.append(1)
                 experience = (
