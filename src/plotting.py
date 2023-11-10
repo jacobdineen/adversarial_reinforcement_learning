@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 
-def plot_selected_columns_from_csv(file_path):
+def plt_helper(file_path):
     # Define the columns to plot
-    columns = ["rollout/ep_rew_mean", "train/loss", "train/value_loss", "train/policy_gradient_loss"]
+    columns = ["rollout/ep_rew_mean", "train/loss"]
 
     # Read the CSV file into a DataFrame
     df = pd.read_csv(file_path)
 
     # Create subplots
-    _, axs = plt.subplots(nrows=2, ncols=2, figsize=(15, 10))
+    _, axs = plt.subplots(nrows=1, ncols=2, figsize=(10, 6))
     axs = axs.flatten()  # Flatten the array of axes for easy iteration
 
     for i, column_name in enumerate(columns):
@@ -30,38 +29,5 @@ def plot_selected_columns_from_csv(file_path):
         axs[i].legend()
 
     # Adjust layout to prevent overlap
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_rewards_and_cumulative(rewards):
-    cumulative_rewards = np.cumsum(rewards)
-
-    plt.figure(figsize=(14, 7))
-
-    # Rewards over Episodes
-    plt.subplot(1, 2, 1)
-    plt.plot(rewards, label="Rewards")
-    # Trendline for Rewards
-    z = np.polyfit(range(len(rewards)), rewards, 1)
-    p = np.poly1d(z)
-    plt.plot(range(len(rewards)), p(range(len(rewards))), "r--", label="Trendline")
-    plt.title("Rewards over Episodes")
-    plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.legend()
-
-    # Cumulative Rewards over Episodes
-    plt.subplot(1, 2, 2)
-    plt.plot(cumulative_rewards, label="Cumulative Rewards")
-    # Trendline for Cumulative Rewards
-    z = np.polyfit(range(len(cumulative_rewards)), cumulative_rewards, 1)
-    p = np.poly1d(z)
-    plt.plot(range(len(cumulative_rewards)), p(range(len(cumulative_rewards))), "r--", label="Trendline")
-    plt.title("Cumulative Rewards over Episodes")
-    plt.xlabel("Episode")
-    plt.ylabel("Cumulative Reward")
-    plt.legend()
-
     plt.tight_layout()
     plt.show()

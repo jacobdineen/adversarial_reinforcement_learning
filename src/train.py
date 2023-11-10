@@ -9,9 +9,11 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.logger import configure
 
-from src.env import *
 from src.env import ImagePerturbEnv
-from src.plotting import plot_rewards_and_cumulative, plot_selected_columns_from_csv
+from src.plotting import plt_helper
+
+# from src.env import *
+from src.rewards import *
 from src.utils import EndlessDataLoader, get_dataloaders, load_model, set_seed
 
 # This is to redirect the logging output to a file
@@ -78,11 +80,11 @@ reward_functions = {
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
 parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
 
-parser.add_argument("--num_episodes", type=int, default=1000, help="Number of episodes to run.")
+parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run.")
 parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training.")
 parser.add_argument("--val_split", type=float, default=0.2, help="Holdout data for validation and testing.")
 parser.add_argument(
-    "--train_limit", type=int, default=None, help="Training dataloader limit - useful for debugging shorter runs."
+    "--train_limit", type=int, default=1000, help="Training dataloader limit - useful for debugging shorter runs."
 )
 parser.add_argument("--verbose", type=bool, default=False, help="If you want environment logging to be verbose.")
 parser.add_argument("--prog_bar", type=bool, default=True, help="If you want to use tqdm for train loop.")
@@ -96,7 +98,7 @@ parser.add_argument(
     "--reward_func",
     type=str,
     choices=list(reward_functions.keys()),
-    default="reward_two",
+    default="reward_seven",
     help="The name of the reward function to use.",
 )
 
@@ -116,13 +118,12 @@ model_save_path = args.model_save_path + "_" + dataset_name
 model_save_path = f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
 
 if __name__ == "__main__":
+    assert train_limit % 50 == 0, "train_limit must be a multiple of 50"
+    logging.info(args)
     set_seed(SEED)
-    # this needs to be 1 - because each call to iter will return a single image
-    # and that's what the env expects
-    # This is highly seeded to return the same batches every run
 
     train_loader, valid_loader, test_loader = get_dataloaders(
-        dataset_name=dataset_name, batch_size=1, val_split=val_split, seed=SEED, train_limit=train_limit
+        dataset_name=dataset_name, batch_size=50, val_split=val_split, seed=SEED, train_limit=train_limit
     )
 
     steps_per_episode = len(train_loader)  # number of images to perturb per episode
@@ -187,5 +188,5 @@ if __name__ == "__main__":
     logging.info(f"Dataframe saved to {model_performance_save_path}")
 
     # If `plot_rewards_and_cumulative` requires just the rewards, you can extract them
-    plot_selected_columns_from_csv(f"{LOGGING_OUTPUT_PATH}/progress.csv")
-    plot_rewards_and_cumulative(df["rewards"])
+    plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv")
+    # plot_rewards_and_cumulative(df["rewards"])
