@@ -17,11 +17,18 @@ def plt_helper(file_path):
     for i, column_name in enumerate(columns):
         # Check if the specified column exists in the DataFrame
         if column_name not in df.columns:
-            print(f"The specified column '{column_name}' does not exist in the CSV file.")
+            print(
+                f"The specified column '{column_name}' does not exist in the CSV file."
+            )
             continue  # Skip to the next column
 
         # Plot the specified column
-        axs[i].plot(df[column_name], marker="o", linestyle="-", label=column_name.replace("/", " "))
+        axs[i].plot(
+            df[column_name],
+            marker="o",
+            linestyle="-",
+            label=column_name.replace("/", " "),
+        )
         axs[i].set_title(column_name.replace("/", " "))
         axs[i].set_xlabel("Steps")
         axs[i].set_ylabel(column_name.split("/")[-1])
