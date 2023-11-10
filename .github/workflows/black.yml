@@ -31,4 +31,3 @@ jobs:
             commit_message: Apply auto-formatting
             branch: ${{ github.head_ref }}
             file_pattern: '**/*.py'
-            repository: jacobdineen/adv_rl
