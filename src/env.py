@@ -3,8 +3,8 @@
 main environment logic
 to be used downstream for model trianing
 """
+
 import logging
-from typing import Any, Dict, Tuple
 
 import gymnasium as gym
 import numpy as np
@@ -14,132 +14,120 @@ from gymnasium import spaces
 
 logging.basicConfig(level=logging.INFO)
 
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-DEVICE = "cpu"
-CLASSES = ("plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
+DEVICE = torch.device("cpu")
 
 
 class ImagePerturbEnv(gym.Env):
     """
-    A custom gym environment for perturbing images and evaluating the changes
-    against a deep learning model.
-
-    Attributes:
-        dataloader (iter): An iterator over a PyTorch DataLoader.
-        model (torch.nn.Module): The deep learning model to test against.
-        attack_budget (int): The number of actions to perturb the image.
-        current_attack_count (int): Counter for perturbation actions.
-        action_space (gym.spaces.Discrete): The action space.
-        observation_space (gym.spaces.Box): The observation space.
-        image (torch.Tensor): The current image from the dataloader.
-        target_class (int): The class label for the current image.
-        image_shape (Tuple[int, int, int]): The shape of the image tensor.
+    A custom gym environment for perturbing batches of images.
     """
 
     def __init__(
         self,
-        dataloader: Any,
-        model: torch.nn.Module,
-        steps_per_episode: int = 100,
-        verbose: bool = False,
-        seed: int | None = None,
+        dataloader,
+        model,
+        reward_func,
+        steps_per_episode=100,
+        verbose=False,
+        seed=None,
     ):
-        """
-        Initialize the environment.
-
-        Args:
-            dataloader: PyTorch DataLoader iterator.
-            model: The deep learning model to evaluate against.
-            lambda_: hyperparameter that controls how severely we penalize non-sparse solutions. A higher LAMBDA means a steeper penalty.
-        """
-        logging.info("env device: {}".format(DEVICE))
         self.dataloader = iter(dataloader)
         self.model = model.to(DEVICE)
         self.model.eval()
-        self.image, self.target_class = next(self.dataloader)
-        self.image = self.image.to(DEVICE)
-        self.target_class = self.target_class.to(DEVICE)
-        self.original_image = self.image.clone()  # Save the original image
-        self.image_shape = self.image.shape  # torch.Size([1, 3, 224, 224]) for cifar
-        total_actions = self.image_shape[2] * self.image_shape[3]
-        self.action_space = spaces.Discrete(total_actions)
-        self.observation_space = spaces.Box(low=0, high=1, shape=self.image_shape, dtype=np.float32)
+        self.batch_size = dataloader.dataloader.batch_size
+        self.images, self.target_classes = next(self.dataloader)
+        self.images = self.images.to(DEVICE)
+        self.target_classes = self.target_classes.to(DEVICE)
+        self.original_images = self.images.clone()
+
+        self.image_shape = self.images.shape[
+            1:
+        ]  # Assuming shape [batch_size, channels, height, width]
+        total_actions = self.image_shape[1] * self.image_shape[2]
+
+        self.action_space = spaces.MultiDiscrete([total_actions] * self.batch_size)
+        batched_shape = (self.batch_size,) + self.image_shape
+        self.observation_space = spaces.Box(
+            low=0, high=1, shape=batched_shape, dtype=np.float32
+        )
+
         self.steps_per_episode = steps_per_episode
         self.current_step = 0
         self.episode_count = 0
         self.verbose = verbose
         self.seed = seed
+        self.reward_func = reward_func
 
-        logging.info(f"Initialized ImagePerturbEnv with the following parameters:")
-        logging.info(f"Action Space Size: {total_actions}")
-        logging.info(f"Observation Space Shape: {self.observation_space.shape}")
-        logging.info(f"Initial Image Shape: {self.image_shape}")
-
-    def step(self, action: int) -> Tuple[torch.Tensor, float, bool, bool, Dict[str, Any]]:
+    def step(self, actions: int) -> tuple[torch.Tensor, float, bool, dict]:
         """
-        Take a step using an action.
+        Take a step using an action. This applies an action of a batch of images
+        reward is averaged over a batch to return a scalar
 
         Args:
-            action: An integer action from the action space.
-            Currently - an action corresponds to shutting an (x,y) coordinate across ALL channels
-            So one step modifies three separate pixels
+            actions (int): The action to take.
 
         Returns:
-            Tuple: A tuple containing:
-                - perturbed_image: The new state (perturbed image)
-                - reward: The reward for the taken action
-                - done: Flag indicating if the episode has ended
-                - truncated: Flag indicating if the episode was truncated (currently unused)
-                - info: Additional information (empty in this case)
+            tuple: A tuple containing the next state, the reward, whether the episode is done, and additional info.
+
         """
-        perturbed_image = self.image.clone().to(DEVICE)
+        perturbed_images = self.images.clone().to(DEVICE)
+        rewards = []
 
-        channel, temp = divmod(
-            action, self.image_shape[2] * self.image_shape[3]
-        )  # channel, x*y coordinates in the image
-        x, y = divmod(temp, self.image_shape[3])  # x, y coordinates in the image
-        # perturbed_image[0, channel, x, y] = 0  # perturb the image by setting the pixel to 0
-        for channel in range(self.image_shape[1]):
-            perturbed_image[0, channel, x, y] = 0
+        for i, action in enumerate(actions):
+            channel, temp = divmod(action, self.image_shape[1] * self.image_shape[2])
+            x, y = divmod(temp, self.image_shape[2])
+            for channel in range(self.image_shape[0]):
+                perturbed_images[i, channel, x, y] = 0
 
-        reward = self.compute_reward(self.image, perturbed_image)
+            reward = self.compute_reward(
+                self.images[i], perturbed_images[i], self.current_step
+            )
+            rewards.append(reward)
 
-        # Increment the step counter and check if the episode should end
-        # this will trigger a reset, else we just want to sample the next image
-        # and try to attack that
         self.current_step += 1
         done = self.current_step >= self.steps_per_episode
 
-        # should grab a new image after each step
-        self.image, self.target_class = next(self.dataloader)
-        return perturbed_image, reward, done, False, {}
+        # Load next batch of images
+        if done or self.current_step % self.batch_size == 0:
+            try:
+                self.images, self.target_classes = next(self.dataloader)
+                self.images = self.images.to(DEVICE)
+                self.target_classes = self.target_classes.to(DEVICE)
+            except StopIteration:
+                # Handle case where dataloader is exhausted
+                pass
 
-    def compute_reward(self, original_image: torch.Tensor, perturbed_image: torch.Tensor) -> float:
-        """_summary_
+        return perturbed_images, np.mean(rewards), [done] * self.batch_size, False, {}
 
-        Args:
-            original_image (torch.Tensor): og image
-            perturbed_image (torch.Tensor): perturbed_image
-
-        Returns:
-            float: reward for step
-        """
-        original_image = original_image.to(DEVICE)
-        perturbed_image = perturbed_image.to(DEVICE)
+    def compute_reward(self, original_image, perturbed_image, current_step):
+        original_image = original_image.unsqueeze(0).to(DEVICE)
+        perturbed_image = perturbed_image.unsqueeze(0).to(DEVICE)
         with torch.no_grad():
             original_output = self.model(original_image)
-            original_prob = F.softmax(original_output, dim=1)[0][self.target_class].item()
+            original_prob = F.softmax(original_output, dim=1)[0][
+                self.target_classes[0]
+            ].item()
 
             perturbed_output = self.model(perturbed_image)
-            perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_class].item()
+            perturbed_prob = F.softmax(perturbed_output, dim=1)[0][
+                self.target_classes[0]
+            ].item()
 
-        original_prob = max(original_prob, 1e-8)  # for underflow issues
-        reward = original_prob - perturbed_prob
-        return reward
+        reward_arguments = {
+            "original_output": original_output,
+            "perturbed_output": perturbed_output,
+            "original_prob": original_prob,
+            "perturbed_prob": perturbed_prob,
+            "current_step": current_step,
+            "target_class": self.target_classes[0].item(),
+        }
+
+        return self.reward_func(self, **reward_arguments)
 
     def reset(self, seed: int | None = None) -> tuple[torch.Tensor, dict]:
         """
         Reset the environment state if the num times to sample has been reached.
+        This is equiv to num_images // batch_size steps
         Otherwise, reset the image to the original image and continue sampling.
 
         Returns:
@@ -149,27 +137,18 @@ class ImagePerturbEnv(gym.Env):
         # gym.Env specifically requires it, as gym.Env's reset method does not accept a seed parameter.
         # If your superclass does not use the seed, you can remove this line.
         super().reset(seed=seed)  # Only if necessary.
+        self.current_step = 0
+        self.episode_count += 1
+        self.dataloader = iter(self.dataloader)
+        self.images, self.target_classes = next(self.dataloader)
+        self.images = self.images.to(DEVICE)
+        self.target_classes = self.target_classes.to(DEVICE)
+        self.original_images = self.images.clone()
 
-        # Reset the step if we reached the end of an episode
-        if self.current_step >= self.steps_per_episode:
-            self.current_step = 0
-            self.episode_count += 1
+        if self.verbose:
+            logging.info("Environment reset.")
 
-            self.dataloader = iter(self.dataloader)
-            self.image, self.target_class = next(self.dataloader)
-
-            self.image = self.image.to(DEVICE)
-            self.target_class = self.target_class.to(DEVICE)
-            self.original_image = self.image.clone()
-
-            if self.verbose:
-                logging.info(f"Resetting environment with new refreshed dataloader")
-                logging.info(f"episode count: {self.episode_count}")
-                logging.info(f"current_step: {self.current_step}")
-
-        info = dict()
-
-        return self.image, info
+        return self.images, {}
 
 
 # if __name__ == "__main__":
