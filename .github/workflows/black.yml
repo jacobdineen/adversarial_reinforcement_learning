@@ -23,9 +23,8 @@ jobs:
         id: format
 
       - name: Commit changes
-        if: steps.format.outputs.files_updated == 'true'
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: Apply auto-formatting
-          branch: ${{ github.head_ref }}
-          file_pattern: ./*.py
+            commit_message: Apply auto-formatting
+            branch: ${{ github.head_ref }}
+            file_pattern: '**/*.py' # Updated to match all .py files in all directories
