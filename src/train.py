@@ -78,21 +78,51 @@ reward_functions = {
 
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
-parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
+parser.add_argument(
+    "--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar"
+)
 
-parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run.")
-parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training.")
-parser.add_argument("--val_split", type=float, default=0.2, help="Holdout data for validation and testing.")
 parser.add_argument(
-    "--train_limit", type=int, default=1000, help="Training dataloader limit - useful for debugging shorter runs."
-)
-parser.add_argument("--verbose", type=bool, default=False, help="If you want environment logging to be verbose.")
-parser.add_argument("--prog_bar", type=bool, default=True, help="If you want to use tqdm for train loop.")
-parser.add_argument(
-    "--model_save_path", type=str, default="src/model_weights/ppo", help="Where to save trained PPO model"
+    "--num_episodes", type=int, default=100, help="Number of episodes to run."
 )
 parser.add_argument(
-    "--model_performance_save_path", type=str, default="src/ppo_performance", help="Where to save ep info buff"
+    "--batch_size", type=int, default=256, help="Batch size for training."
+)
+parser.add_argument(
+    "--val_split",
+    type=float,
+    default=0.2,
+    help="Holdout data for validation and testing.",
+)
+parser.add_argument(
+    "--train_limit",
+    type=int,
+    default=1000,
+    help="Training dataloader limit - useful for debugging shorter runs.",
+)
+parser.add_argument(
+    "--verbose",
+    type=bool,
+    default=False,
+    help="If you want environment logging to be verbose.",
+)
+parser.add_argument(
+    "--prog_bar",
+    type=bool,
+    default=True,
+    help="If you want to use tqdm for train loop.",
+)
+parser.add_argument(
+    "--model_save_path",
+    type=str,
+    default="src/model_weights/ppo",
+    help="Where to save trained PPO model",
+)
+parser.add_argument(
+    "--model_performance_save_path",
+    type=str,
+    default="src/ppo_performance",
+    help="Where to save ep info buff",
 )
 parser.add_argument(
     "--reward_func",
@@ -115,7 +145,9 @@ model_performance_save_path = args.model_performance_save_path
 dataset_name = args.dataset_name
 selected_reward_func = reward_functions[args.reward_func]
 model_save_path = args.model_save_path + "_" + dataset_name
-model_save_path = f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
+model_save_path = (
+    f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
+)
 
 if __name__ == "__main__":
     assert train_limit % 50 == 0, "train_limit must be a multiple of 50"
@@ -123,7 +155,11 @@ if __name__ == "__main__":
     set_seed(SEED)
 
     train_loader, valid_loader, test_loader = get_dataloaders(
-        dataset_name=dataset_name, batch_size=50, val_split=val_split, seed=SEED, train_limit=train_limit
+        dataset_name=dataset_name,
+        batch_size=50,
+        val_split=val_split,
+        seed=SEED,
+        train_limit=train_limit,
     )
 
     steps_per_episode = len(train_loader)  # number of images to perturb per episode
@@ -164,10 +200,19 @@ if __name__ == "__main__":
     # Training here
     # callback necessary because defaults to last 100 episodes
     callback = RewardLoggerCallback(check_freq=steps_per_episode)
-    model = PPO("MlpPolicy", train_env, device=DEVICE, verbose=1, n_steps=steps_per_episode, batch_size=batch_size)
+    model = PPO(
+        "MlpPolicy",
+        train_env,
+        device=DEVICE,
+        verbose=1,
+        n_steps=steps_per_episode,
+        batch_size=batch_size,
+    )
     model.set_logger(new_logger)
     logging.info(f"model device: {model.device}")
-    model.learn(total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback)
+    model.learn(
+        total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback
+    )
     logging.info("Training complete.")
     logging.info(f"Saving model to {model_save_path}")
     model.save(model_save_path)
@@ -183,7 +228,10 @@ if __name__ == "__main__":
 
     episode_info = callback.get_training_info()
     df = pd.DataFrame(episode_info)
-    df.rename(columns={"rewards": "rewards", "lengths": "lengths", "times": "times"}, inplace=True)
+    df.rename(
+        columns={"rewards": "rewards", "lengths": "lengths", "times": "times"},
+        inplace=True,
+    )
     df.to_csv(f"{model_performance_save_path}.csv")
     logging.info(f"Dataframe saved to {model_performance_save_path}")
 

@@ -140,7 +140,9 @@ def reward_output_difference(self, **kwargs):
     norm_type = kwargs.get("norm_type", 2)  # Default to L2 norm if not provided
 
     if original_output is None or perturbed_output is None:
-        raise ValueError("reward_output_difference requires 'original_output' and 'perturbed_output'.")
+        raise ValueError(
+            "reward_output_difference requires 'original_output' and 'perturbed_output'."
+        )
 
     diff = original_output - perturbed_output
     return torch.norm(diff, p=norm_type) / original_output.numel()
