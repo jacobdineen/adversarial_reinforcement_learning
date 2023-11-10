@@ -1,0 +1,32 @@
+name: Python Black Formatter
+
+on: [push, pull_request]
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10' # or any version you prefer
+
+      - name: Install black
+        run: pip install black
+
+      - name: Run black check
+        run: black --check .
+
+      # Optionally, you can also include a step to automatically format and commit code
+      # - name: Run black format
+      #   run: black .
+      # - name: Commit changes
+      #   uses: stefanzweifel/git-auto-commit-action@v4
+      #   with:
+      #     commit_message: Apply auto-formatting
+      #     branch: ${{ github.head_ref }}
+      #     file_pattern: ./*.py
