@@ -22,7 +22,15 @@ class ImagePerturbEnv(gym.Env):
     A custom gym environment for perturbing batches of images.
     """
 
-    def __init__(self, dataloader, model, reward_func, steps_per_episode=100, verbose=False, seed=None):
+    def __init__(
+        self,
+        dataloader,
+        model,
+        reward_func,
+        steps_per_episode=100,
+        verbose=False,
+        seed=None,
+    ):
         self.dataloader = iter(dataloader)
         self.model = model.to(DEVICE)
         self.model.eval()
@@ -32,12 +40,16 @@ class ImagePerturbEnv(gym.Env):
         self.target_classes = self.target_classes.to(DEVICE)
         self.original_images = self.images.clone()
 
-        self.image_shape = self.images.shape[1:]  # Assuming shape [batch_size, channels, height, width]
+        self.image_shape = self.images.shape[
+            1:
+        ]  # Assuming shape [batch_size, channels, height, width]
         total_actions = self.image_shape[1] * self.image_shape[2]
 
         self.action_space = spaces.MultiDiscrete([total_actions] * self.batch_size)
         batched_shape = (self.batch_size,) + self.image_shape
-        self.observation_space = spaces.Box(low=0, high=1, shape=batched_shape, dtype=np.float32)
+        self.observation_space = spaces.Box(
+            low=0, high=1, shape=batched_shape, dtype=np.float32
+        )
 
         self.steps_per_episode = steps_per_episode
         self.current_step = 0
@@ -67,7 +79,9 @@ class ImagePerturbEnv(gym.Env):
             for channel in range(self.image_shape[0]):
                 perturbed_images[i, channel, x, y] = 0
 
-            reward = self.compute_reward(self.images[i], perturbed_images[i], self.current_step)
+            reward = self.compute_reward(
+                self.images[i], perturbed_images[i], self.current_step
+            )
             rewards.append(reward)
 
         self.current_step += 1
@@ -90,10 +104,14 @@ class ImagePerturbEnv(gym.Env):
         perturbed_image = perturbed_image.unsqueeze(0).to(DEVICE)
         with torch.no_grad():
             original_output = self.model(original_image)
-            original_prob = F.softmax(original_output, dim=1)[0][self.target_classes[0]].item()
+            original_prob = F.softmax(original_output, dim=1)[0][
+                self.target_classes[0]
+            ].item()
 
             perturbed_output = self.model(perturbed_image)
-            perturbed_prob = F.softmax(perturbed_output, dim=1)[0][self.target_classes[0]].item()
+            perturbed_prob = F.softmax(perturbed_output, dim=1)[0][
+                self.target_classes[0]
+            ].item()
 
         reward_arguments = {
             "original_output": original_output,
