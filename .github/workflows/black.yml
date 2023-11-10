@@ -21,12 +21,11 @@ jobs:
       - name: Run black check
         run: black --check .
 
-      # Optionally, you can also include a step to automatically format and commit code
-      # - name: Run black format
-      #   run: black .
-      # - name: Commit changes
-      #   uses: stefanzweifel/git-auto-commit-action@v4
-      #   with:
-      #     commit_message: Apply auto-formatting
-      #     branch: ${{ github.head_ref }}
-      #     file_pattern: ./*.py
+      - name: Run black format
+        run: black .
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Apply auto-formatting
+          branch: ${{ github.head_ref }}
+          file_pattern: ./*.py
