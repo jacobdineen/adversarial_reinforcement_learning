@@ -15,6 +15,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST
 from torchvision.models import resnet18
+import torch.nn.functional as F
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -162,3 +164,105 @@ def preprocess_image(image_path):
     img.show()
     input_image_tensor = transform_img(img).unsqueeze(0)
     return input_image_tensor, img
+
+#Filter Actions
+
+
+def add_gaussian_noise(image, mean=0, std=1):
+    """
+    Add Gaussian noise to the input image.
+
+    Args:
+        image (torch.Tensor): Input image tensor.
+        mean (float): Mean of the Gaussian noise.
+        std (float): Standard deviation of the Gaussian noise.
+
+    Returns:
+        torch.Tensor: Image with added Gaussian noise.
+    """
+    if image.shape[1] == 1:  # Grayscale image
+        noise = torch.randn_like(image) * std + mean
+    elif image.shape[1] == 3:  # Color image
+        noise = torch.randn_like(image[:, :1, :, :]) * std + mean  # Apply to the first channel only
+        noise = torch.cat([noise] * 3, dim=1)  # Expand to all channels
+
+    noisy_image = image + noise
+    return torch.clamp(noisy_image, 0, 1)  # Ensure pixel values are in [0, 1] range
+
+
+def apply_gaussian_blur(image, kernel_size=5):
+    """
+    Apply Gaussian blur to the input image.
+
+    Args:
+        image (torch.Tensor): Input image tensor.
+        kernel_size (int): Size of the Gaussian kernel.
+
+    Returns:
+        torch.Tensor: Image with applied Gaussian blur.
+    """
+    if image.shape[1] == 1:  # Grayscale image
+        blurred_image = F.conv2d(image, torch.ones(1, 1, kernel_size, kernel_size) / kernel_size**2, padding=kernel_size//2)
+    elif image.shape[1] == 3:  # Color image
+        blurred_image = torch.cat([F.conv2d(image[:, i:i+1, :, :], torch.ones(1, 1, kernel_size, kernel_size) / kernel_size**2, padding=kernel_size//2) for i in range(3)], dim=1)
+
+    return torch.clamp(blurred_image, 0, 1)  # Ensure pixel values are in [0, 1] range
+
+
+def apply_sharpening(image, alpha=1.5):
+    """
+    Apply sharpening filter to the input image.
+
+    Args:
+        image (torch.Tensor): Input image tensor.
+        alpha (float): Strength of the sharpening effect.
+
+    Returns:
+        torch.Tensor: Image with applied sharpening.
+    """
+    if image.shape[1] == 1:  # Grayscale image
+        kernel = torch.tensor([[-1, -1, -1],
+                               [-1,  9, -1],
+                               [-1, -1, -1]], dtype=torch.float32)
+        sharpened_image = F.conv2d(image, kernel.unsqueeze(0).unsqueeze(0), padding=1) * alpha + image * (1 - alpha)
+    elif image.shape[1] == 3:  # Color image
+        kernel = torch.tensor([[-1, -1, -1],
+                               [-1,  9, -1],
+                               [-1, -1, -1]], dtype=torch.float32)
+        sharpened_image = torch.cat([F.conv2d(image[:, i:i+1, :, :], kernel.unsqueeze(0).unsqueeze(0), padding=1) * alpha + image[:, i:i+1, :, :] * (1 - alpha) for i in range(3)], dim=1)
+
+    return torch.clamp(sharpened_image, 0, 1)  # Ensure pixel values are in [0, 1] range
+
+
+
+
+def white_out_block(image):
+    """
+    Apply a filter that whites out a small block in the image.
+
+    Args:
+        image (torch.Tensor): Input image tensor.
+
+    Returns:
+        torch.Tensor: Image with the white-out block applied.
+    """
+    # Get image dimensions
+    _, _, height, width = image.shape
+
+    # Define block size as 1% of image size
+    block_width = max(1, int(0.01 * width))
+    block_height = max(1, int(0.01 * height))
+
+    # Randomly choose block position
+    x = random.randint(0, width - block_width)
+    y = random.randint(0, height - block_height)
+
+    # Create a mask to identify the region of interest (block)
+    mask = torch.zeros_like(image)
+    mask[:, :, y:y+block_height, x:x+block_width] = 1
+
+    # Set the region identified by the mask to a high intensity white value
+    white_block_image = image.clone()
+    white_block_image[mask.bool()] = 1.0
+
+    return white_block_image

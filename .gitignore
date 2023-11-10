@@ -15,3 +15,5 @@ adv_rl.egg-info
 src/model_weights/trained_qnet.pth
 src/model_weights/trained_qnets.pth
 src/model_weights/ppo.zip
+src/data
+src/training_plots
