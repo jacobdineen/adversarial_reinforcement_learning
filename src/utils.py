@@ -39,7 +39,8 @@ def load_model(dataset_name) -> resnet18:
         model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         model.load_state_dict(torch.load("src/model_weights/mnist.pth", map_location=DEVICE))
     logging.info(f"Resnet {dataset_name} model loaded successfully on device: {DEVICE}")
-    return model.eval()
+
+    return model.to(DEVICE).eval()
 
 
 def set_seed(seed: int) -> None:
