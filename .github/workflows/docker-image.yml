@@ -3,13 +3,11 @@ name: Python Black Formatter and Docker Image CI
 on:
   push:
     branches: [ '**' ]  # Triggers on push to any branch
-  pull_request:
-    branches: [ '**' ]  # Triggers on pull requests to any branch
+
 
 jobs:
   format:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
 
       - name: Check out the repository
@@ -35,7 +33,6 @@ jobs:
             file_pattern: '**/*.py'
 
   build:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
