@@ -28,7 +28,7 @@ RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/wh
 
 # Copy the rest of the application code into the container
 COPY . .
-RUN pip3 install -e
+RUN pip3 install -e .
 
 # Install ZSH plugins
 RUN sh -c "$(curl -L https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
