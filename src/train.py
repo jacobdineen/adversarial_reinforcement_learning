@@ -1,20 +1,27 @@
 # -*- coding: utf-8 -*-
+"""
+main train logic for RL agent
+"""
 import argparse
+import gc
 import logging
 
 import pandas as pd
 import torch
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.logger import configure
 
 from src.env import ImagePerturbEnv
 from src.plotting import plt_helper
-
-# from src.env import *
-from src.rewards import *
-from src.utils import EndlessDataLoader, get_dataloaders, load_model, set_seed
+from src.rewards import reward_functions
+from src.utils import (
+    EndlessDataLoader,
+    RewardLoggerCallback,
+    get_dataloaders,
+    load_model,
+    set_seed,
+)
 
 # This is to redirect the logging output to a file
 LOGGING_OUTPUT_PATH = "./src/logs/sb3_log/"
@@ -24,57 +31,6 @@ logging.basicConfig(level=logging.INFO)
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 SEED = 42
-
-
-class RewardLoggerCallback(BaseCallback):
-    def __init__(self, check_freq):
-        super().__init__()
-        self.check_freq = check_freq
-        self.all_rewards = []
-        self.all_lengths = []
-        self.all_times = []
-        self.policy_gradient_losses = []
-        self.value_losses = []
-
-    def _on_step(self) -> bool:
-        # Check if it's time to log episode information
-        if self.n_calls % self.check_freq == 0:
-            # Retrieve the episode information from the buffer
-            ep_info = self.model.ep_info_buffer
-            if ep_info:
-                # Extract the latest episode information
-                info = ep_info[-1]
-                self.all_rewards.append(info["r"])
-                self.all_lengths.append(info["l"])
-                self.all_times.append(info["t"])
-
-        return True
-
-    def get_training_info(self):
-        """Retrieve the training information."""
-        return {
-            "rewards": self.all_rewards,
-            "lengths": self.all_lengths,
-            "times": self.all_times,
-        }
-
-
-reward_functions = {
-    # Measures the change in the feature space caused by the perturbation.
-    "reward_one": reward_distance,
-    # Calculates how much the perturbation reduces the classifier's confidence.
-    "reward_two": reward_improvement,
-    # Similar to reward_improvement, but with a penalty for taking more steps.
-    "reward_three": reward_time_decay,
-    # Checks if the perturbation leads to a successful misclassification.
-    "reward_four": reward_goal_achievement,
-    # A composite reward combining several aspects of the perturbation task.
-    "reward_five": reward_composite,
-    # Quantifies the alteration of the model's output due to the perturbation.
-    "reward_six": reward_output_difference,
-    # Rewards the agent for decreasing the model's confidence in the correct class.
-    "reward_seven": reward_target_prob_inversion,
-}
 
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
@@ -128,7 +84,7 @@ parser.add_argument(
     "--reward_func",
     type=str,
     choices=list(reward_functions.keys()),
-    default="reward_seven",
+    default="reward_one",
     help="The name of the reward function to use.",
 )
 
@@ -152,11 +108,13 @@ model_save_path = (
 if __name__ == "__main__":
     assert train_limit % 50 == 0, "train_limit must be a multiple of 50"
     logging.info(args)
+    torch.cuda.empty_cache()
+    gc.collect()
     set_seed(SEED)
 
     train_loader, valid_loader, test_loader = get_dataloaders(
         dataset_name=dataset_name,
-        batch_size=50,
+        batch_size=20 if dataset_name == "cifar10" else 50,
         val_split=val_split,
         seed=SEED,
         train_limit=train_limit,

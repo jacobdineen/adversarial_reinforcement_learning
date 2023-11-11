@@ -9,6 +9,7 @@ from typing import Tuple
 import numpy as np
 import torch
 from PIL import Image
+from stable_baselines3.common.callbacks import BaseCallback
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -19,6 +20,39 @@ from torchvision.models import resnet18
 logging.basicConfig(level=logging.INFO)
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+class RewardLoggerCallback(BaseCallback):
+    def __init__(self, check_freq):
+        super().__init__()
+        self.check_freq = check_freq
+        self.all_rewards = []
+        self.all_lengths = []
+        self.all_times = []
+        self.policy_gradient_losses = []
+        self.value_losses = []
+
+    def _on_step(self) -> bool:
+        # Check if it's time to log episode information
+        if self.n_calls % self.check_freq == 0:
+            # Retrieve the episode information from the buffer
+            ep_info = self.model.ep_info_buffer
+            if ep_info:
+                # Extract the latest episode information
+                info = ep_info[-1]
+                self.all_rewards.append(info["r"])
+                self.all_lengths.append(info["l"])
+                self.all_times.append(info["t"])
+
+        return True
+
+    def get_training_info(self):
+        """Retrieve the training information."""
+        return {
+            "rewards": self.all_rewards,
+            "lengths": self.all_lengths,
+            "times": self.all_times,
+        }
 
 
 def load_model(dataset_name) -> resnet18:
@@ -45,7 +79,8 @@ def load_model(dataset_name) -> resnet18:
             torch.load("src/model_weights/mnist.pth", map_location=DEVICE)
         )
     logging.info(f"Resnet {dataset_name} model loaded successfully on device: {DEVICE}")
-    return model
+
+    return model.to(DEVICE).eval()
 
 
 def set_seed(seed: int) -> None:
