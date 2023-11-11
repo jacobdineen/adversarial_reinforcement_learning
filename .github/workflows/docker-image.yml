@@ -37,5 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
+      - name: Set up Docker image tag
+        id: docker_tag
+        run: echo "DOCKER_TAG=my-image-name:$(date +%s)" >> $GITHUB_ENV
+
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+        run: docker build . --file Dockerfile --tag ${{ env.DOCKER_TAG }}
+
+      - name: Run the Python script
+        run: docker run ${{ env.DOCKER_TAG }} python src/train.py --dataset_name mnist --num_episodes 5 --train_limit 100
