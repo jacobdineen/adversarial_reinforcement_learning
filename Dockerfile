@@ -38,4 +38,5 @@ RUN sh -c "$(curl -L https://github.com/deluan/zsh-in-docker/releases/download/v
     -p https://github.com/zsh-users/zsh-completions
 
 # Set the command to run your application
+# eventually want entrpoint
 CMD ["zsh"]
