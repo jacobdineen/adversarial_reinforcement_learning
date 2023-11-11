@@ -19,6 +19,8 @@ RUN apt-get install -y python3-pip
 
 # Install the packages from the requirements file
 RUN pip3 install --no-cache-dir -r docker_requirements.txt
+RUN pip3 install --no-cache-dir -r docker_requirements.txt
+RUN pip3 install -e .
 
 # Upgrade pip
 RUN python3 -m pip install --upgrade pip
