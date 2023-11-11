@@ -19,8 +19,6 @@ RUN apt-get install -y python3-pip
 
 # Install the packages from the requirements file
 RUN pip3 install --no-cache-dir -r docker_requirements.txt
-RUN pip3 install --no-cache-dir -r docker_requirements.txt
-RUN pip3 install -e .
 
 # Upgrade pip
 RUN python3 -m pip install --upgrade pip
@@ -30,6 +28,7 @@ RUN pip3 install torch torchvision torchaudio -f https://download.pytorch.org/wh
 
 # Copy the rest of the application code into the container
 COPY . .
+RUN pip3 install -e
 
 # Install ZSH plugins
 RUN sh -c "$(curl -L https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
