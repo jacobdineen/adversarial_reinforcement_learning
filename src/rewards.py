@@ -72,7 +72,9 @@ def reward_time_decay(self, **kwargs):
     decay_rate = kwargs.get("decay_rate", 0.01)
 
     if original_probs is None or perturbed_probs is None or current_step is None:
-        raise ValueError("original_probs, perturbed_probs, and current_step are required.")
+        raise ValueError(
+            "original_probs, perturbed_probs, and current_step are required."
+        )
 
     time_penalty = decay_rate * current_step
     time_decay_rewards = (original_probs - perturbed_probs) - time_penalty
@@ -136,7 +138,9 @@ def reward_composite(self, **kwargs):
 
     improvement_rewards = original_probs - perturbed_probs
     time_penalty = decay_rate * current_step
-    target_probs = F.softmax(perturbed_outputs, dim=1)[torch.arange(len(target_classes)), target_classes]
+    target_probs = F.softmax(perturbed_outputs, dim=1)[
+        torch.arange(len(target_classes)), target_classes
+    ]
     goal_rewards = (target_probs < threshold).float()
 
     composite_rewards = improvement_rewards + goal_rewards - time_penalty
@@ -161,7 +165,9 @@ def reward_output_difference(self, **kwargs):
     norm_type = kwargs.get("norm_type", 2)  # Default to L2 norm if not provided
 
     if original_output is None or perturbed_output is None:
-        raise ValueError("reward_output_difference requires 'original_output' and 'perturbed_output'.")
+        raise ValueError(
+            "reward_output_difference requires 'original_output' and 'perturbed_output'."
+        )
 
     diff = original_output - perturbed_output
     norms = torch.norm(diff, p=norm_type, dim=1)
