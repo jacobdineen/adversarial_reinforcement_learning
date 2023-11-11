@@ -10,6 +10,10 @@ jobs:
   format:
     runs-on: ubuntu-latest
     steps:
+      # Add a step to pull the latest changes from the remote
+      - name: Pull latest changes from remote
+        run: git pull origin ${{ github.head_ref }}
+
       - name: Check out the repository
         uses: actions/checkout@v2
 
