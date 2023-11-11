@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+"""
+main train logic for RL agent
+"""
 import argparse
 import gc
 import logging
@@ -79,16 +82,10 @@ reward_functions = {
 
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
-parser.add_argument(
-    "--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar"
-)
+parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
 
-parser.add_argument(
-    "--num_episodes", type=int, default=100, help="Number of episodes to run."
-)
-parser.add_argument(
-    "--batch_size", type=int, default=256, help="Batch size for training."
-)
+parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run.")
+parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training.")
 parser.add_argument(
     "--val_split",
     type=float,
@@ -146,9 +143,7 @@ model_performance_save_path = args.model_performance_save_path
 dataset_name = args.dataset_name
 selected_reward_func = reward_functions[args.reward_func]
 model_save_path = args.model_save_path + "_" + dataset_name
-model_save_path = (
-    f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
-)
+model_save_path = f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
 
 if __name__ == "__main__":
     assert train_limit % 50 == 0, "train_limit must be a multiple of 50"
@@ -213,9 +208,7 @@ if __name__ == "__main__":
     )
     model.set_logger(new_logger)
     logging.info(f"model device: {model.device}")
-    model.learn(
-        total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback
-    )
+    model.learn(total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback)
     logging.info("Training complete.")
     logging.info(f"Saving model to {model_save_path}")
     model.save(model_save_path)
