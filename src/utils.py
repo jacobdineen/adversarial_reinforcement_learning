@@ -9,6 +9,7 @@ from typing import Tuple
 import numpy as np
 import torch
 from PIL import Image
+from stable_baselines3.common.callbacks import BaseCallback
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -19,6 +20,39 @@ from torchvision.models import resnet18
 logging.basicConfig(level=logging.INFO)
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+class RewardLoggerCallback(BaseCallback):
+    def __init__(self, check_freq):
+        super().__init__()
+        self.check_freq = check_freq
+        self.all_rewards = []
+        self.all_lengths = []
+        self.all_times = []
+        self.policy_gradient_losses = []
+        self.value_losses = []
+
+    def _on_step(self) -> bool:
+        # Check if it's time to log episode information
+        if self.n_calls % self.check_freq == 0:
+            # Retrieve the episode information from the buffer
+            ep_info = self.model.ep_info_buffer
+            if ep_info:
+                # Extract the latest episode information
+                info = ep_info[-1]
+                self.all_rewards.append(info["r"])
+                self.all_lengths.append(info["l"])
+                self.all_times.append(info["t"])
+
+        return True
+
+    def get_training_info(self):
+        """Retrieve the training information."""
+        return {
+            "rewards": self.all_rewards,
+            "lengths": self.all_lengths,
+            "times": self.all_times,
+        }
 
 
 def load_model(dataset_name) -> resnet18:
@@ -33,17 +67,11 @@ def load_model(dataset_name) -> resnet18:
 
     if dataset_name == "cifar":
         model = resnet18(num_classes=10)
-        model.load_state_dict(
-            torch.load("src/model_weights/cifar.pth", map_location=DEVICE)
-        )
+        model.load_state_dict(torch.load("src/model_weights/cifar.pth", map_location=DEVICE))
     elif dataset_name == "mnist":
         model = resnet18(num_classes=10)
-        model.conv1 = nn.Conv2d(
-            1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
-        )
-        model.load_state_dict(
-            torch.load("src/model_weights/mnist.pth", map_location=DEVICE)
-        )
+        model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        model.load_state_dict(torch.load("src/model_weights/mnist.pth", map_location=DEVICE))
     logging.info(f"Resnet {dataset_name} model loaded successfully on device: {DEVICE}")
 
     return model.to(DEVICE).eval()
@@ -122,20 +150,12 @@ def get_dataloaders(
             ]
         )
 
-        full_train_dataset = CIFAR10(
-            root="./data", train=True, download=True, transform=transform
-        )
-        test_dataset = CIFAR10(
-            root="./data", train=False, download=True, transform=transform
-        )
+        full_train_dataset = CIFAR10(root="./data", train=True, download=True, transform=transform)
+        test_dataset = CIFAR10(root="./data", train=False, download=True, transform=transform)
 
     elif dataset_name == "mnist":
-        full_train_dataset = MNIST(
-            root="./data", train=True, download=True, transform=transform
-        )
-        test_dataset = MNIST(
-            root="./data", train=False, download=True, transform=transform
-        )
+        full_train_dataset = MNIST(root="./data", train=True, download=True, transform=transform)
+        test_dataset = MNIST(root="./data", train=False, download=True, transform=transform)
 
     num_train = len(full_train_dataset)
     indices = list(range(num_train))
@@ -145,9 +165,7 @@ def get_dataloaders(
 
     # If train_limit is set, reduce the size of train_idx
     if train_limit is not None:
-        train_limit = min(
-            train_limit, len(indices) - split
-        )  # Ensure limit is not more than available indices
+        train_limit = min(train_limit, len(indices) - split)  # Ensure limit is not more than available indices
         train_idx, valid_idx = indices[split : split + train_limit], indices[:split]
     else:
         train_idx, valid_idx = indices[split:], indices[:split]
@@ -155,12 +173,8 @@ def get_dataloaders(
     train_sampler = SubsetRandomSampler(train_idx)
     valid_sampler = SubsetRandomSampler(valid_idx)
 
-    train_loader = DataLoader(
-        full_train_dataset, batch_size=batch_size, shuffle=False, sampler=train_sampler
-    )
-    valid_loader = DataLoader(
-        full_train_dataset, batch_size=batch_size, shuffle=False, sampler=valid_sampler
-    )
+    train_loader = DataLoader(full_train_dataset, batch_size=batch_size, shuffle=False, sampler=train_sampler)
+    valid_loader = DataLoader(full_train_dataset, batch_size=batch_size, shuffle=False, sampler=valid_sampler)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     logging.info(

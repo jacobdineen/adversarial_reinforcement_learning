@@ -40,16 +40,12 @@ class ImagePerturbEnv(gym.Env):
         self.target_classes = self.target_classes.to(DEVICE)
         self.original_images = self.images.clone()
 
-        self.image_shape = self.images.shape[
-            1:
-        ]  # Assuming shape [batch_size, channels, height, width]
+        self.image_shape = self.images.shape[1:]  # Assuming shape [batch_size, channels, height, width]
         total_actions = self.image_shape[1] * self.image_shape[2]
 
         self.action_space = spaces.MultiDiscrete([total_actions] * self.batch_size)
         batched_shape = (self.batch_size,) + self.image_shape
-        self.observation_space = spaces.Box(
-            low=0, high=1, shape=batched_shape, dtype=np.float32
-        )
+        self.observation_space = spaces.Box(low=0, high=1, shape=batched_shape, dtype=np.float32)
 
         self.steps_per_episode = steps_per_episode
         self.current_step = 0
@@ -79,10 +75,7 @@ class ImagePerturbEnv(gym.Env):
             for channel in range(self.image_shape[0]):
                 perturbed_images[i, channel, x, y] = 0
 
-            reward = self.compute_reward(
-                self.images[i], perturbed_images[i], self.current_step
-            )
-            rewards.append(reward)
+        rewards = self.compute_reward(self.images, perturbed_images, self.current_step)
 
         self.current_step += 1
         done = self.current_step >= self.steps_per_episode
@@ -97,29 +90,29 @@ class ImagePerturbEnv(gym.Env):
                 # Handle case where dataloader is exhausted
                 pass
 
-        return perturbed_images, np.mean(rewards), [done] * self.batch_size, False, {}
+        return perturbed_images, torch.mean(rewards), [done] * self.batch_size, False, {}
 
-    def compute_reward(self, original_image, perturbed_image, current_step):
-        original_image = original_image.unsqueeze(0).to(DEVICE)
-        perturbed_image = perturbed_image.unsqueeze(0).to(DEVICE)
+    def compute_reward(self, original_images, perturbed_images, current_step):
+        original_images = original_images.to(DEVICE)
+        perturbed_images = perturbed_images.to(DEVICE)
         with torch.no_grad():
-            original_output = self.model(original_image)
-            original_prob = F.softmax(original_output, dim=1)[0][
-                self.target_classes[0]
-            ].item()
+            original_output = self.model(original_images)
+            original_probs = F.softmax(original_output, dim=1)[
+                torch.arange(len(self.target_classes)), self.target_classes
+            ]
 
-            perturbed_output = self.model(perturbed_image)
-            perturbed_prob = F.softmax(perturbed_output, dim=1)[0][
-                self.target_classes[0]
-            ].item()
+            perturbed_output = self.model(perturbed_images)
+            perturbed_probs = F.softmax(perturbed_output, dim=1)[
+                torch.arange(len(self.target_classes)), self.target_classes
+            ]
 
         reward_arguments = {
             "original_output": original_output,
             "perturbed_output": perturbed_output,
-            "original_prob": original_prob,
-            "perturbed_prob": perturbed_prob,
+            "original_probs": original_probs,
+            "perturbed_probs": perturbed_probs,
             "current_step": current_step,
-            "target_class": self.target_classes[0].item(),
+            "target_classes": self.target_classes,
         }
 
         return self.reward_func(self, **reward_arguments)
