@@ -44,5 +44,11 @@ jobs:
       - name: Build the Docker image
         run: docker build . --file Dockerfile --tag ${{ env.DOCKER_TAG }}
 
-      - name: Run the Python script
+  post-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Testing mnist env on limited run
+        run: docker run ${{ env.DOCKER_TAG }} python3 src/train.py --dataset_name mnist --num_episodes 5 --train_limit 100
+
+      - name: Testing cifar env on limited run
         run: docker run ${{ env.DOCKER_TAG }} python3 src/train.py --dataset_name mnist --num_episodes 5 --train_limit 100
