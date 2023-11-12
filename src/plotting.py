@@ -1,9 +1,7 @@
-# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
-def plt_helper(file_path):
+def plt_helper(file_path, vertical_lines=None):
     # Define the columns to plot
     columns = ["rollout/ep_rew_mean", "train/loss"]
 
@@ -17,23 +15,21 @@ def plt_helper(file_path):
     for i, column_name in enumerate(columns):
         # Check if the specified column exists in the DataFrame
         if column_name not in df.columns:
-            print(
-                f"The specified column '{column_name}' does not exist in the CSV file."
-            )
+            print(f"The specified column '{column_name}' does not exist in the CSV file.")
             continue  # Skip to the next column
 
         # Plot the specified column
-        axs[i].plot(
-            df[column_name],
-            marker="o",
-            linestyle="-",
-            label=column_name.replace("/", " "),
-        )
+        axs[i].plot(df[column_name], marker="o", linestyle="-", label=column_name.replace("/", " "))
         axs[i].set_title(column_name.replace("/", " "))
         axs[i].set_xlabel("Steps")
         axs[i].set_ylabel(column_name.split("/")[-1])
         axs[i].grid(True)
         axs[i].legend()
+
+        # Draw vertical lines if provided
+        if vertical_lines is not None:
+            for line_pos in vertical_lines:
+                axs[i].axvline(x=line_pos, color='r', linestyle='--')
 
     # Adjust layout to prevent overlap
     plt.tight_layout()
