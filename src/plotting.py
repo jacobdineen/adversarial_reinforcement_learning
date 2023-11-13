@@ -20,9 +20,7 @@ def plt_helper(file_path, steps):
     # Iterate over the columns to create separate line plots
     for i, column_name in enumerate(columns):
         if column_name not in df.columns:
-            print(
-                f"The specified column '{column_name}' does not exist in the CSV file."
-            )
+            print(f"The specified column '{column_name}' does not exist in the CSV file.")
             continue  # Skip to the next column
         sns.lineplot(
             ax=axs[i],
@@ -35,7 +33,7 @@ def plt_helper(file_path, steps):
         )
 
         axs[i].set_title(column_name.replace("/", " "))
-        axs[i].set_xlabel("Steps")
+        axs[i].set_xlabel("Episode")
         axs[i].set_ylabel(column_name.split("/")[-1])
 
     # Adjust layout to prevent overlap
