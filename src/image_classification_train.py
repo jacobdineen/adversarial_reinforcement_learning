@@ -1,9 +1,11 @@
+# -*- coding: utf-8 -*-
 import argparse
+import gc
+
 import torch
+from torch import nn
 from torchvision import datasets, transforms
 from torchvision.models import resnet18
-from torch import nn
-import gc
 
 
 def train_model(dataset_name, save_path, batch_size, num_epochs):
@@ -22,9 +24,9 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
     if dataset_name.lower() == "mnist":
         print(f"====> Loading {dataset_name} data")
         train_set = datasets.MNIST("./data", train=True, download=True, transform=transform)
-        test_set = datasets.MNIST("./data", train=False, download=True, transform=transform)
+        # test_set = datasets.MNIST("./data", train=False, download=True, transform=transform)
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
+        # test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
         model = resnet18(num_classes=10)
         model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         model = model.to(device)
@@ -38,9 +40,9 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
             ]
         )
         train_set = datasets.CIFAR10("./data", train=True, download=True, transform=transform)
-        test_set = datasets.CIFAR10("./data", train=False, download=True, transform=transform)
+        # test_set = datasets.CIFAR10("./data", train=False, download=True, transform=transform)
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
+        # test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
         model = resnet18(num_classes=10)
         model = model.to(device)
     # Other hyperparameters and optimizer setup
@@ -51,10 +53,10 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
     print(f"====> learning_rate: {learning_rate}")
     print(f"====> Started training Resnet-18 {dataset_name} model")
     print(f"====> using device: {device}")
-    total_step = len(train_loader)
+    # total_step = len(train_loader)
 
     for epoch in range(num_epochs):
-        for i, (images, labels) in enumerate(train_loader):
+        for _, (images, labels) in enumerate(train_loader):
             # Move tensors to the configured device
             images = images.to(device)
             labels = labels.to(device)
