@@ -22,7 +22,7 @@ jobs:
         run: pip install black
 
       - name: Run black format
-        run: black .
+        run: black --line-length=120 .
         id: format
 
       - name: Commit changes
@@ -31,6 +31,24 @@ jobs:
             commit_message: Apply auto-formatting
             branch: ${{ github.head_ref }}
             file_pattern: '**/*.py'
+
+  pylint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'  # Specify the Python version
+
+    - name: Install Pylint
+      run: pip install pylint==3.0.0a4
+
+    - name: Run Pylint
+      run: pylint --max-line-length=120 --ignore-imports=yes -d duplicate-code $(git ls-files '*.py')
 
   build:
     runs-on: ubuntu-latest
