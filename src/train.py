@@ -34,10 +34,16 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
-parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
+parser.add_argument(
+    "--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar"
+)
 
-parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run.")
-parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training.")
+parser.add_argument(
+    "--num_episodes", type=int, default=100, help="Number of episodes to run."
+)
+parser.add_argument(
+    "--batch_size", type=int, default=256, help="Batch size for training."
+)
 parser.add_argument(
     "--val_split",
     type=float,
@@ -97,7 +103,9 @@ dataset_name = args.dataset_name
 k = args.num_runs
 selected_reward_func = reward_functions[args.reward_func]
 model_save_path = args.model_save_path + "_" + dataset_name
-model_save_path = f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
+model_save_path = (
+    f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
+)
 
 if __name__ == "__main__":
     assert train_limit % 50 == 0, "train_limit must be a multiple of 50"
@@ -176,7 +184,9 @@ if __name__ == "__main__":
 
         model.set_logger(new_logger)
         logging.info(f"model device: {model.device}")
-        model.learn(total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback)
+        model.learn(
+            total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback
+        )
 
         # Evaluate the policy with the validation environment
         mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=10)
@@ -188,7 +198,9 @@ if __name__ == "__main__":
     # Find the best model based on mean_reward
     best_run = max(models, key=lambda x: models[x][1])
     best_model, best_mean_reward, _ = models[best_run]
-    logging.info(f"Best model is from run {best_run + 1} with mean reward: {best_mean_reward}")
+    logging.info(
+        f"Best model is from run {best_run + 1} with mean reward: {best_mean_reward}"
+    )
     logging.info(f"Saving best model to {model_save_path}")
     best_model.save(model_save_path)
 

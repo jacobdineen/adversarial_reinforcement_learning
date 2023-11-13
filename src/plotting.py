@@ -20,7 +20,9 @@ def plt_helper(file_path, steps):
     # Iterate over the columns to create separate line plots
     for i, column_name in enumerate(columns):
         if column_name not in df.columns:
-            print(f"The specified column '{column_name}' does not exist in the CSV file.")
+            print(
+                f"The specified column '{column_name}' does not exist in the CSV file."
+            )
             continue  # Skip to the next column
         sns.lineplot(
             ax=axs[i],
