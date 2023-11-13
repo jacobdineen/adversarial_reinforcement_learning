@@ -152,6 +152,7 @@ def main():
     mnist_model = DQNDNN()
     # Load the state dictionary from the file
     checkpoint = torch.load("src/model_weights/simple_mnist2.pth")
+    checkpoint = torch.load("src/model_weights/simple_mnist2.pth", map_location=device)
 
     # Check if the loaded state dict is a dict and has the key 'state_dict'
     if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
