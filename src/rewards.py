@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+# pylint: disable=W0613, R1705
 import torch
 import torch.nn.functional as F
 
