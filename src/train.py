@@ -14,7 +14,6 @@ from stable_baselines3.common.logger import configure
 import random
 
 
-
 from src.env import ImagePerturbEnv
 from src.plotting import plt_helper
 from src.rewards import reward_functions
@@ -90,12 +89,7 @@ parser.add_argument(
     default="reward_one",
     help="The name of the reward function to use.",
 )
-parser.add_argument(
-    "--num_trains",
-    type=int,
-    default=3,
-    help="Number of training runs"
-)
+parser.add_argument("--num_trains", type=int, default=3, help="Number of training runs")
 
 
 args = parser.parse_args()
@@ -127,7 +121,7 @@ if __name__ == "__main__":
         min_seed = 0
         max_seed = 100
 
-# Generate a random seed value within the specified range
+        # Generate a random seed value within the specified range
         SEED = random.randint(min_seed, max_seed)
         logging.info(f"Starting training run with seed={SEED}")
 
@@ -135,73 +129,73 @@ if __name__ == "__main__":
         set_seed(SEED)
 
         train_loader, valid_loader, test_loader = get_dataloaders(
-        dataset_name=dataset_name,
-        batch_size=20 if dataset_name == "cifar10" else 50,
-        val_split=val_split,
-        seed=SEED,
-        train_limit=train_limit,
-    )
+            dataset_name=dataset_name,
+            batch_size=20 if dataset_name == "cifar10" else 50,
+            val_split=val_split,
+            seed=SEED,
+            train_limit=train_limit,
+        )
 
         steps_per_episode = len(train_loader)  # number of images to perturb per episode
         total_timesteps = episodes * steps_per_episode
 
-    # classififer
+        # classififer
         model = load_model(dataset_name=dataset_name)
 
-    #
+        #
         env = ImagePerturbEnv(
-        dataloader=EndlessDataLoader(train_loader),
-        model=model,
-        reward_func=selected_reward_func,  # Pass the reward function here
-        steps_per_episode=steps_per_episode,
-        verbose=verbose,
-    )
+            dataloader=EndlessDataLoader(train_loader),
+            model=model,
+            reward_func=selected_reward_func,  # Pass the reward function here
+            steps_per_episode=steps_per_episode,
+            verbose=verbose,
+        )
 
-    # env
-    # Note the EndlessDataLoader wrapper
-    # This is to ensure that when a dataloader has been exhausted, it is refreshed
-    # by starting from the beginning
+        # env
+        # Note the EndlessDataLoader wrapper
+        # This is to ensure that when a dataloader has been exhausted, it is refreshed
+        # by starting from the beginning
         train_env = ImagePerturbEnv(
-        dataloader=EndlessDataLoader(train_loader),
-        model=model,
-        reward_func=selected_reward_func,
-        steps_per_episode=steps_per_episode,
-        verbose=verbose,
-    )
-    # eventually use this for validation
+            dataloader=EndlessDataLoader(train_loader),
+            model=model,
+            reward_func=selected_reward_func,
+            steps_per_episode=steps_per_episode,
+            verbose=verbose,
+        )
+        # eventually use this for validation
         valid_env = ImagePerturbEnv(
-        dataloader=EndlessDataLoader(valid_loader),
-        model=model,
-        reward_func=selected_reward_func,
-        steps_per_episode=steps_per_episode,
-        verbose=verbose,
-    )
+            dataloader=EndlessDataLoader(valid_loader),
+            model=model,
+            reward_func=selected_reward_func,
+            steps_per_episode=steps_per_episode,
+            verbose=verbose,
+        )
 
-    # Training here
-    # callback necessary because defaults to last 100 episodes
+        # Training here
+        # callback necessary because defaults to last 100 episodes
         callback = RewardLoggerCallback(check_freq=steps_per_episode)
         model = PPO(
-        "MlpPolicy",
-        train_env,
-        device=DEVICE,
-        verbose=1,
-        n_steps=steps_per_episode,
-        batch_size=batch_size,
-    )
+            "MlpPolicy",
+            train_env,
+            device=DEVICE,
+            verbose=1,
+            n_steps=steps_per_episode,
+            batch_size=batch_size,
+        )
         model.set_logger(new_logger)
         logging.info(f"model device: {model.device}")
         model.learn(
-        total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback
-    )
+            total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback
+        )
         logging.info("Training complete.")
         logging.info(f"Saving model to {model_save_path}")
         model.save(model_save_path)
 
-    #     valid_env = ImagePerturbEnv(
-    #     dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
-    # )
+        #     valid_env = ImagePerturbEnv(
+        #     dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
+        # )
 
-    # Evaluate the policy with the validation environment
+        # Evaluate the policy with the validation environment
         mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=10)
         logging.info(f"Validation results: Mean reward: {mean_reward} +/- {std_reward}")
         logging.info(f"Rewrd func calculated using{selected_reward_func}")
@@ -209,9 +203,13 @@ if __name__ == "__main__":
         episode_info = callback.get_training_info()
         df = pd.DataFrame(episode_info)
         df.rename(
-        columns={"rewards": "rewards", "lengths": "lengths", "times": "times",},
-        inplace=True,
-    )
+            columns={
+                "rewards": "rewards",
+                "lengths": "lengths",
+                "times": "times",
+            },
+            inplace=True,
+        )
         df.to_csv(f"{model_performance_save_path}.csv")
         logging.info(f"Dataframe saved to {model_performance_save_path}")
 
@@ -221,10 +219,7 @@ if __name__ == "__main__":
 
     # If `plot_rewards_and_cumulative` requires just the rewards, you can extract them
 
-
-    plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv",episodes)
+    plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv", episodes)
     # plot_rewards_and_cumulative(df["rewards"])
     logging.info(f"Completed {k} training runs")
     # plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv")
-
-
