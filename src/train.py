@@ -14,6 +14,7 @@ from stable_baselines3.common.logger import configure
 import random
 
 
+
 from src.env import ImagePerturbEnv
 from src.plotting import plt_helper
 from src.rewards import reward_functions
@@ -124,7 +125,7 @@ if __name__ == "__main__":
     for run in range(k):
         logging.info(f"Starting training run {run + 1}/{k}")
         min_seed = 0
-        max_seed = 42
+        max_seed = 100
 
 # Generate a random seed value within the specified range
         SEED = random.randint(min_seed, max_seed)
@@ -208,7 +209,7 @@ if __name__ == "__main__":
         episode_info = callback.get_training_info()
         df = pd.DataFrame(episode_info)
         df.rename(
-        columns={"rewards": "rewards", "lengths": "lengths", "times": "times"},
+        columns={"rewards": "rewards", "lengths": "lengths", "times": "times",},
         inplace=True,
     )
         df.to_csv(f"{model_performance_save_path}.csv")
@@ -216,12 +217,14 @@ if __name__ == "__main__":
 
         # steps_this_run = episodes
         # cumulative_steps += steps_this_run
-        vertical_lines.append((episodes*run)+episodes)
+        # vertical_lines.append((episodes*run)+episodes)
 
     # If `plot_rewards_and_cumulative` requires just the rewards, you can extract them
-        # plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv")
+
+
+    plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv",episodes)
     # plot_rewards_and_cumulative(df["rewards"])
     logging.info(f"Completed {k} training runs")
-    plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv", vertical_lines=vertical_lines)
+    # plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv")
 
 
