@@ -5,14 +5,12 @@ main train logic for RL agent
 import argparse
 import gc
 import logging
+import random
 
-import pandas as pd
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.logger import configure
-import random
-
 
 from src.env import ImagePerturbEnv
 from src.plotting import plt_helper
@@ -36,16 +34,10 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
-parser.add_argument(
-    "--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar"
-)
+parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
 
-parser.add_argument(
-    "--num_episodes", type=int, default=100, help="Number of episodes to run."
-)
-parser.add_argument(
-    "--batch_size", type=int, default=256, help="Batch size for training."
-)
+parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run.")
+parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training.")
 parser.add_argument(
     "--val_split",
     type=float,
@@ -89,7 +81,7 @@ parser.add_argument(
     default="reward_one",
     help="The name of the reward function to use.",
 )
-parser.add_argument("--num_trains", type=int, default=3, help="Number of training runs")
+parser.add_argument("--num_runs", type=int, default=3, help="Number of training runs")
 
 
 args = parser.parse_args()
@@ -102,12 +94,10 @@ verbose = args.verbose
 prog_bar = args.prog_bar
 model_performance_save_path = args.model_performance_save_path
 dataset_name = args.dataset_name
-k = args.num_trains
+k = args.num_runs
 selected_reward_func = reward_functions[args.reward_func]
 model_save_path = args.model_save_path + "_" + dataset_name
-model_save_path = (
-    f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
-)
+model_save_path = f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
 
 if __name__ == "__main__":
     assert train_limit % 50 == 0, "train_limit must be a multiple of 50"
@@ -115,7 +105,8 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
     gc.collect()
     cumulative_steps = 0
-    vertical_lines = []
+    models = {}
+
     for run in range(k):
         logging.info(f"Starting training run {run + 1}/{k}")
         min_seed = 0
@@ -182,40 +173,24 @@ if __name__ == "__main__":
             n_steps=steps_per_episode,
             batch_size=batch_size,
         )
+
         model.set_logger(new_logger)
         logging.info(f"model device: {model.device}")
-        model.learn(
-            total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback
-        )
-        logging.info("Training complete.")
-        logging.info(f"Saving model to {model_save_path}")
-        model.save(model_save_path)
-
-        #     valid_env = ImagePerturbEnv(
-        #     dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
-        # )
+        model.learn(total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback)
 
         # Evaluate the policy with the validation environment
         mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=10)
         logging.info(f"Validation results: Mean reward: {mean_reward} +/- {std_reward}")
         logging.info(f"Rewrd func calculated using{selected_reward_func}")
 
-        episode_info = callback.get_training_info()
-        df = pd.DataFrame(episode_info)
-        df.rename(
-            columns={
-                "rewards": "rewards",
-                "lengths": "lengths",
-                "times": "times",
-            },
-            inplace=True,
-        )
-        df.to_csv(f"{model_performance_save_path}.csv")
-        logging.info(f"Dataframe saved to {model_performance_save_path}")
+        models[run] = (model, mean_reward, std_reward)
 
-        # steps_this_run = episodes
-        # cumulative_steps += steps_this_run
-        # vertical_lines.append((episodes*run)+episodes)
+    # Find the best model based on mean_reward
+    best_run = max(models, key=lambda x: models[x][1])
+    best_model, best_mean_reward, _ = models[best_run]
+    logging.info(f"Best model is from run {best_run + 1} with mean reward: {best_mean_reward}")
+    logging.info(f"Saving best model to {model_save_path}")
+    best_model.save(model_save_path)
 
     # If `plot_rewards_and_cumulative` requires just the rewards, you can extract them
 
