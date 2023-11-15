@@ -11,7 +11,8 @@ from stable_baselines3.common.logger import configure
 import sys
 sys.path.append("/home/meesum/Desktop/adv_rl")
 
-from src.filter_env import ImagePerturbEnv
+# from src.filter_env import ImagePerturbEnv
+from src.block_env import ImagePerturbEnv
 from src.plotting import plot_rewards_and_cumulative, plot_selected_columns_from_csv
 from src.utils import EndlessDataLoader, get_dataloaders, load_model, set_seed
 
