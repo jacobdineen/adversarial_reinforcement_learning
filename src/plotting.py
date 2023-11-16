@@ -29,7 +29,7 @@ def plt_helper(file_path, steps):
             y=column_name,
             # hue="Run",
             estimator="mean",
-            ci="sd",
+            # ci="sd",
         )
 
         axs[i].set_title(column_name.replace("/", " "))
