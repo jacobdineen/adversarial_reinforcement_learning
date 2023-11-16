@@ -40,16 +40,12 @@ class ImagePerturbEnv(gym.Env):
         self.target_classes = self.target_classes.to(DEVICE)
         self.original_images = self.images.clone()
 
-        self.image_shape = self.images.shape[
-            1:
-        ]  # Assuming shape [batch_size, channels, height, width]
+        self.image_shape = self.images.shape[1:]  # Assuming shape [batch_size, channels, height, width]
         total_actions = self.image_shape[1] * self.image_shape[2]
 
         self.action_space = spaces.MultiDiscrete([total_actions] * self.batch_size)
         batched_shape = (self.batch_size,) + self.image_shape
-        self.observation_space = spaces.Box(
-            low=0, high=1, shape=batched_shape, dtype=np.float32
-        )
+        self.observation_space = spaces.Box(low=0, high=1, shape=batched_shape, dtype=np.float32)
 
         self.steps_per_episode = steps_per_episode
         self.current_step = 0
