@@ -1,14 +1,47 @@
+# -*- coding: utf-8 -*-
 import argparse
+import gc
+import logging
+
 import torch
+from torch import nn
 from torchvision import datasets, transforms
 from torchvision.models import resnet18
-from torch import nn
-import gc
+
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+logging.basicConfig(level=logging.INFO)
 
 
-def train_model(dataset_name, save_path, batch_size, num_epochs):
-    # Set the device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def test_model_accuracy(model, test_data) -> float:
+    """
+    Test the accuracy of a model on the test set.
+
+    Args:
+        model(str): The name of the model to test.
+
+    Returns:
+        float: The accuracy of the model on the test set.
+    """
+
+    total_correct = 0
+
+    for batch in test_data:
+        images, labels = batch
+        images = images.to(DEVICE)
+        labels = labels.to(DEVICE)
+        with torch.no_grad():
+            output = model(images)
+            _, pred = torch.max(output, dim=1)
+            total_correct += torch.sum(pred == labels).item()
+
+    return total_correct / len(test_data.dataset)
+
+
+def train_model(dataset_name, save_path, batch_size, num_epochs, eval: bool = True):
+    if dataset_name.lower() not in ["mnist", "cifar"]:
+        raise ValueError(
+            f"dataset_name must be one of ['mnist', 'cifar'], not {dataset_name}"
+        )
 
     # Define a transform to normalize the data
     transform = transforms.Compose(
@@ -37,7 +70,7 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
         model.conv1 = nn.Conv2d(
             1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
         )
-        model = model.to(device)
+        model = model.to(DEVICE)
     elif dataset_name.lower() == "cifar":
         # Handle other datasets if needed
         print(f"====> Loading {dataset_name} data")
@@ -60,7 +93,7 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
             test_set, batch_size=batch_size, shuffle=False
         )
         model = resnet18(num_classes=10)
-        model = model.to(device)
+        model = model.to(DEVICE)
     # Other hyperparameters and optimizer setup
     learning_rate = 0.01
     criterion = nn.CrossEntropyLoss()
@@ -70,14 +103,13 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
     print(f"====> num_epochs: {num_epochs}")
     print(f"====> learning_rate: {learning_rate}")
     print(f"====> Started training Resnet-18 {dataset_name} model")
-    print(f"====> using device: {device}")
-    total_step = len(train_loader)
+    print(f"====> using DEVICE: {DEVICE}")
 
     for epoch in range(num_epochs):
-        for i, (images, labels) in enumerate(train_loader):
-            # Move tensors to the configured device
-            images = images.to(device)
-            labels = labels.to(device)
+        for _, (images, labels) in enumerate(train_loader):
+            # Move tensors to the configured DEVICE
+            images = images.to(DEVICE)
+            labels = labels.to(DEVICE)
 
             # Forward pass
             outputs = model(images)
@@ -94,11 +126,18 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
 
         print("Epoch [{}/{}], Loss: {:.4f}".format(epoch + 1, num_epochs, loss.item()))
 
-    # Save the model with the dataset name
     print(f"====> Finished training {dataset_name} model")
-    print(f"====> Saving {dataset_name} model to {save_path}_{dataset_name}.pth")
-    torch.save(model.state_dict(), f"{save_path}_{dataset_name}.pth")
-    print(f"====> Saved {dataset_name} model to {save_path}_{dataset_name}.pth")
+
+    # eval model on test set here
+    if eval:
+        logging.info("Evaluating model on test set")
+        model.eval()
+        test_accuracy = test_model_accuracy(model, test_loader)
+        print(f"====> Test accuracy of {dataset_name} model: {test_accuracy}")
+
+    print(f"====> Saving {dataset_name} model to {save_path}/{dataset_name}.pth")
+    torch.save(model.state_dict(), f"{save_path}/{dataset_name}.pth")
+    print(f"====> Saved {dataset_name} model to {save_path}/{dataset_name}.pth")
 
 
 if __name__ == "__main__":
@@ -106,13 +145,19 @@ if __name__ == "__main__":
         description="Train a model with a specific dataset"
     )
     parser.add_argument("dataset_name", type=str, help="Name of the dataset")
-    parser.add_argument("location_path", type=str, help="Path to save the model")
     parser.add_argument(
-        "--batch_size", type=int, default=64, help="Batch size for training"
+        "--location_path",
+        type=str,
+        default="src/model_weights",
+        help="Path to save the model",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=128, help="Batch size for training"
     )
     parser.add_argument(
         "--num_epochs", type=int, default=5, help="Number of epochs for training"
     )
     args = parser.parse_args()
+    print(args)
 
     train_model(args.dataset_name, args.location_path, args.batch_size, args.num_epochs)

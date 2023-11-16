@@ -22,8 +22,8 @@ pip install -e .  # install this module in editable mode
 python src/image_classification_train.py [-h]
                                          [--batch_size BATCH_SIZE]
                                          [--num_epochs NUM_EPOCHS]
+                                         [--location_path LOCATION_PATH] # src/model_weights/dataset_name
                                          dataset_name # mnist or cifar
-                                         location_path
 
 # train PPO agent calling custom env
 python src/train.py [-h] [--dataset_name DATASET_NAME]  # mnist or cifar
