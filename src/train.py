@@ -12,7 +12,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.logger import configure
 
-from src.env import ImagePerturbEnv
+from src.env import BlockBasedPerturbEnv, SinglePixelPerturbEnv
 from src.plotting import plt_helper
 from src.rewards import reward_functions
 from src.utils import (
@@ -35,7 +35,13 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
 parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
-
+parser.add_argument(
+    "--env_type",
+    type=str,
+    choices=["single_pixel", "block_based"],
+    default="block_based",
+    help="Type of environment to use (single_pixel or block_based).",
+)
 parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run.")
 parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training.")
 parser.add_argument(
@@ -86,6 +92,7 @@ parser.add_argument("--num_runs", type=int, default=3, help="Number of training 
 
 args = parser.parse_args()
 
+env_type = args.env_type
 episodes = args.num_episodes
 batch_size = args.batch_size
 val_split = args.val_split
@@ -100,6 +107,13 @@ model_save_path = args.model_save_path + "_" + dataset_name
 model_save_path = f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
 
 if __name__ == "__main__":
+    if env_type == "single_pixel":
+        EnvClass = SinglePixelPerturbEnv
+    elif env_type == "block_based":
+        EnvClass = BlockBasedPerturbEnv
+    else:
+        raise ValueError("Invalid environment type")
+
     assert train_limit % 50 == 0, "train_limit must be a multiple of 50"
     logging.info(args)
     torch.cuda.empty_cache()
@@ -134,7 +148,7 @@ if __name__ == "__main__":
         model = load_model(dataset_name=dataset_name)
 
         #
-        env = ImagePerturbEnv(
+        env = EnvClass(
             dataloader=EndlessDataLoader(train_loader),
             model=model,
             reward_func=selected_reward_func,  # Pass the reward function here
@@ -146,7 +160,7 @@ if __name__ == "__main__":
         # Note the EndlessDataLoader wrapper
         # This is to ensure that when a dataloader has been exhausted, it is refreshed
         # by starting from the beginning
-        train_env = ImagePerturbEnv(
+        train_env = EnvClass(
             dataloader=EndlessDataLoader(train_loader),
             model=model,
             reward_func=selected_reward_func,
@@ -154,7 +168,7 @@ if __name__ == "__main__":
             verbose=verbose,
         )
         # eventually use this for validation
-        valid_env = ImagePerturbEnv(
+        valid_env = EnvClass(
             dataloader=EndlessDataLoader(valid_loader),
             model=model,
             reward_func=selected_reward_func,

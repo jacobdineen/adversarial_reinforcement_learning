@@ -27,6 +27,7 @@ python src/image_classification_train.py [-h]
 
 # train PPO agent calling custom env
 python src/train.py [-h] [--dataset_name DATASET_NAME]  # mnist or cifar
+                         [--env_type ENV_TYPE]  # mnist or cifar
                          [--num_episodes NUM_EPISODES]
                          [--batch_size BATCH_SIZE]
                          [--val_split VAL_SPLIT]
