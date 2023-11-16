@@ -122,14 +122,14 @@ class EndlessDataLoader:
 
 
 def get_dataloaders(
-    dataset_name,
+    dataset_name: str,
     batch_size: int = 32,
     val_split: float = 0.1,
     seed: int = 42,
     train_limit: int = None,  # Add train_limit parameter
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:
     """
-    Get data loaders for the CIFAR-10 dataset, split into training, validation, and test sets.
+    Get data loaders for the MNIST / CIFAR-10 dataset, split into training, validation, and test sets.
 
     Args:
         batch_size (int): Number of samples per batch to load.
