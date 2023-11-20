@@ -80,7 +80,7 @@ class AbstractImagePerturbEnv(gym.Env, ABC):
 
         return self.reward_func(self, **reward_arguments)
 
-    def reset(self, seed: Union[int,None] = None) -> Tuple[torch.Tensor, dict]:
+    def reset(self, seed: Union[int, None] = None) -> Tuple[torch.Tensor, dict]:
         super().reset(seed=seed)  # Call this only if necessary based on your gym.Env implementation.
         self.current_step = 0
         self.episode_count += 1
