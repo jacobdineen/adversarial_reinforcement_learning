@@ -6,7 +6,7 @@ to be used downstream for model trianing
 
 import logging
 from abc import ABC, abstractmethod
-
+from typing import Tuple, Union
 import gymnasium as gym
 import numpy as np
 import torch
@@ -49,7 +49,7 @@ class AbstractImagePerturbEnv(gym.Env, ABC):
         self.reward_func = reward_func
 
     @abstractmethod
-    def step(self, actions: int) -> tuple[torch.Tensor, float, bool, dict]:
+    def step(self, actions: int) -> Tuple[torch.Tensor, float, bool, dict]:
         """
         Take a step using an action. This method needs to be implemented by subclasses.
         """
@@ -80,7 +80,7 @@ class AbstractImagePerturbEnv(gym.Env, ABC):
 
         return self.reward_func(self, **reward_arguments)
 
-    def reset(self, seed: int | None = None) -> tuple[torch.Tensor, dict]:
+    def reset(self, seed: Union[int,None] = None) -> Tuple[torch.Tensor, dict]:
         super().reset(seed=seed)  # Call this only if necessary based on your gym.Env implementation.
         self.current_step = 0
         self.episode_count += 1
@@ -119,7 +119,7 @@ class SinglePixelPerturbEnv(AbstractImagePerturbEnv):
         batched_shape = (self.batch_size,) + self.image_shape
         return spaces.Box(low=0, high=1, shape=batched_shape, dtype=np.float32)
 
-    def step(self, actions: int) -> tuple[torch.Tensor, float, bool, dict]:
+    def step(self, actions: int) -> Tuple[torch.Tensor, float, bool, dict]:
         """
         Take a step using an action. This applies an action of a batch of images
         reward is averaged over a batch to return a scalar
@@ -157,6 +157,7 @@ class SinglePixelPerturbEnv(AbstractImagePerturbEnv):
 
         return (
             perturbed_images,
+            rewards,
             torch.mean(rewards),
             [done] * self.batch_size,
             False,
@@ -187,7 +188,7 @@ class BlockBasedPerturbEnv(AbstractImagePerturbEnv):
         batched_shape = (self.batch_size,) + self.image_shape
         return spaces.Box(low=0, high=1, shape=batched_shape, dtype=np.float32)
 
-    def step(self, actions: int) -> tuple[torch.Tensor, float, bool, dict]:
+    def step(self, actions: int) -> Tuple[torch.Tensor, float, bool, dict]:
         """
         Take a step using an action. This applies an action of a batch of images
         reward is averaged over a batch to return a scalar
@@ -243,7 +244,8 @@ class BlockBasedPerturbEnv(AbstractImagePerturbEnv):
 
         return (
             perturbed_images,
-            torch.mean(rewards),
+            # torch.mean(rewards),
+            rewards,
             [done] * self.batch_size,
             False,
             {},

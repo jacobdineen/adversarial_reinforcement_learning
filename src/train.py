@@ -127,7 +127,8 @@ if __name__ == "__main__":
         max_seed = 100
 
         # Generate a random seed value within the specified range
-        SEED = random.randint(min_seed, max_seed)
+        # SEED = random.randint(min_seed, max_seed)
+        SEED = 42
         logging.info(f"Starting training run with seed={SEED}")
 
         # seed=base_seed+run
