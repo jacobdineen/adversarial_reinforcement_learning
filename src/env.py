@@ -7,6 +7,7 @@ to be used downstream for model trianing
 import logging
 from abc import ABC, abstractmethod
 from typing import Tuple, Union
+
 import gymnasium as gym
 import numpy as np
 import torch
@@ -15,6 +16,11 @@ from gymnasium import spaces
 
 logging.basicConfig(level=logging.INFO)
 DEVICE = torch.device("cpu")
+
+
+def count_changed_pixels(original_images, perturbed_images):
+    changed_pixels = torch.sum(original_images != perturbed_images)
+    return changed_pixels.item()
 
 
 class AbstractImagePerturbEnv(gym.Env, ABC):
@@ -49,7 +55,7 @@ class AbstractImagePerturbEnv(gym.Env, ABC):
         self.reward_func = reward_func
 
     @abstractmethod
-    def step(self, actions: int) -> Tuple[torch.Tensor, float, bool, dict]:
+    def step(self, actions: int, testing: bool = False) -> Tuple[torch.Tensor, float, bool, dict]:
         """
         Take a step using an action. This method needs to be implemented by subclasses.
         """
@@ -119,7 +125,7 @@ class SinglePixelPerturbEnv(AbstractImagePerturbEnv):
         batched_shape = (self.batch_size,) + self.image_shape
         return spaces.Box(low=0, high=1, shape=batched_shape, dtype=np.float32)
 
-    def step(self, actions: int) -> Tuple[torch.Tensor, float, bool, dict]:
+    def step(self, actions: int, testing: bool = False) -> Tuple[torch.Tensor, float, bool, dict]:
         """
         Take a step using an action. This applies an action of a batch of images
         reward is averaged over a batch to return a scalar
@@ -140,10 +146,23 @@ class SinglePixelPerturbEnv(AbstractImagePerturbEnv):
             for channel in range(self.image_shape[0]):
                 perturbed_images[i, channel, x, y] = 0
 
+        if self.verbose:
+            changed_pixel_count = count_changed_pixels(self.images, perturbed_images)
+            logging.info(f"num of images: {len(self.images)}")
+            logging.info(f"Changed pixel count: {changed_pixel_count}")
+
         rewards = self.compute_reward(self.images, perturbed_images, self.current_step)
 
         self.current_step += 1
         done = self.current_step >= self.steps_per_episode
+
+        if testing:
+            return (
+                self.images,
+                perturbed_images,
+                rewards,
+                torch.mean(rewards),
+            )
 
         # Load next batch of images
         if done or self.current_step % self.batch_size == 0:
@@ -157,7 +176,6 @@ class SinglePixelPerturbEnv(AbstractImagePerturbEnv):
 
         return (
             perturbed_images,
-            rewards,
             torch.mean(rewards),
             [done] * self.batch_size,
             False,
@@ -188,7 +206,7 @@ class BlockBasedPerturbEnv(AbstractImagePerturbEnv):
         batched_shape = (self.batch_size,) + self.image_shape
         return spaces.Box(low=0, high=1, shape=batched_shape, dtype=np.float32)
 
-    def step(self, actions: int) -> Tuple[torch.Tensor, float, bool, dict]:
+    def step(self, actions: int, testing: bool = False) -> Tuple[torch.Tensor, float, bool, dict]:
         """
         Take a step using an action. This applies an action of a batch of images
         reward is averaged over a batch to return a scalar
@@ -226,11 +244,23 @@ class BlockBasedPerturbEnv(AbstractImagePerturbEnv):
                         i, current_channel, x_start : x_start + block_size_x, y_start : y_start + block_size_y
                     ]
                 )
+        if self.verbose:
+            changed_pixel_count = count_changed_pixels(self.images, perturbed_images)
+            logging.info(f"num of images: {len(self.images)}")
+            logging.info(f"Changed pixel count: {changed_pixel_count}")
 
         rewards = self.compute_reward(self.images, perturbed_images, self.current_step)
 
         self.current_step += 1
         done = self.current_step >= self.steps_per_episode
+
+        if testing:
+            return (
+                self.images,
+                perturbed_images,
+                rewards,
+                torch.mean(rewards),
+            )
 
         # Load next batch of images
         if done or self.current_step % self.batch_size == 0:
@@ -244,8 +274,7 @@ class BlockBasedPerturbEnv(AbstractImagePerturbEnv):
 
         return (
             perturbed_images,
-            # torch.mean(rewards),
-            rewards,
+            torch.mean(rewards),
             [done] * self.batch_size,
             False,
             {},
