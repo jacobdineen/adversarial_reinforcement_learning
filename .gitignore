@@ -16,4 +16,4 @@ src/model_weights/trained_qnet.pth
 src/model_weights/trained_qnets.pth
 src/model_weights/ppo.zip
 src/model_weights/ppo*
-data/MNIST/raw/
+src/data/MNIST/raw/
