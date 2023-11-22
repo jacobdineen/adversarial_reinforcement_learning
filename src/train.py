@@ -5,7 +5,6 @@ main train logic for RL agent
 import argparse
 import gc
 import logging
-import random
 
 import torch
 from stable_baselines3 import PPO
@@ -127,7 +126,8 @@ if __name__ == "__main__":
         max_seed = 100
 
         # Generate a random seed value within the specified range
-        SEED = random.randint(min_seed, max_seed)
+        # SEED = random.randint(min_seed, max_seed)
+        SEED = 42
         logging.info(f"Starting training run with seed={SEED}")
 
         # seed=base_seed+run
@@ -147,19 +147,6 @@ if __name__ == "__main__":
         # classififer
         model = load_model(dataset_name=dataset_name)
 
-        #
-        env = EnvClass(
-            dataloader=EndlessDataLoader(train_loader),
-            model=model,
-            reward_func=selected_reward_func,  # Pass the reward function here
-            steps_per_episode=steps_per_episode,
-            verbose=verbose,
-        )
-
-        # env
-        # Note the EndlessDataLoader wrapper
-        # This is to ensure that when a dataloader has been exhausted, it is refreshed
-        # by starting from the beginning
         train_env = EnvClass(
             dataloader=EndlessDataLoader(train_loader),
             model=model,

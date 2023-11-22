@@ -38,6 +38,11 @@ python src/train.py [-h] [--dataset_name DATASET_NAME]  # mnist or cifar
                          [--model_performance_save_path MODEL_PERFORMANCE_SAVE_PATH]
 
 
+python src/inference.py [-h] [--dataset_name DATASET_NAME]
+                             [--env_type {single_pixel,block_based}]
+                             [--val_split VAL_SPLIT]
+                             [--reward_func {reward_one,reward_two,reward_three,reward_four,reward_five,reward_six,reward_seven}]
+                              [--model_save_path MODEL_SAVE_PATH]
 ```
 
 
