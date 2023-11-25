@@ -1,8 +1,22 @@
 # -*- coding: utf-8 -*-
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+class DQNDNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(in_features=784, out_features=128)
+        self.out = nn.Linear(in_features=128, out_features=10)
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = self.out(x)
+        return x
 
 
 class ResidualBlock(nn.Module):
