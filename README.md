@@ -22,11 +22,12 @@ pip install -e .  # install this module in editable mode
 python src/image_classification_train.py [-h]
                                          [--batch_size BATCH_SIZE]
                                          [--num_epochs NUM_EPOCHS]
+                                         [--location_path LOCATION_PATH] # src/model_weights/dataset_name
                                          dataset_name # mnist or cifar
-                                         location_path
 
 # train PPO agent calling custom env
 python src/train.py [-h] [--dataset_name DATASET_NAME]  # mnist or cifar
+                         [--env_type ENV_TYPE]  # mnist or cifar
                          [--num_episodes NUM_EPISODES]
                          [--batch_size BATCH_SIZE]
                          [--val_split VAL_SPLIT]
@@ -37,6 +38,11 @@ python src/train.py [-h] [--dataset_name DATASET_NAME]  # mnist or cifar
                          [--model_performance_save_path MODEL_PERFORMANCE_SAVE_PATH]
 
 
+python src/inference.py [-h] [--dataset_name DATASET_NAME]
+                             [--env_type {single_pixel,block_based}]
+                             [--val_split VAL_SPLIT]
+                             [--reward_func {reward_one,reward_two,reward_three,reward_four,reward_five,reward_six,reward_seven}]
+                              [--model_save_path MODEL_SAVE_PATH]
 ```
 
 

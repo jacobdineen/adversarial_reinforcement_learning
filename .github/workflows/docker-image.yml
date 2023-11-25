@@ -3,13 +3,13 @@ name: Python Black Formatter and Docker Image CI
 on:
   push:
     branches: [ '**' ]  # Triggers on push to any branch
-  pull_request:
-    branches: [ '**' ]  # Triggers on pull requests to any branch
+
 
 jobs:
   format:
     runs-on: ubuntu-latest
     steps:
+
       - name: Check out the repository
         uses: actions/checkout@v2
 
@@ -22,7 +22,7 @@ jobs:
         run: pip install black
 
       - name: Run black format
-        run: black .
+        run: black --line-length=120 .
         id: format
 
       - name: Commit changes
@@ -32,9 +32,38 @@ jobs:
             branch: ${{ github.head_ref }}
             file_pattern: '**/*.py'
 
+  pylint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'  # Specify the Python version
+
+    - name: Install Pylint
+      run: pip install pylint==3.0.0a4
+
+    - name: Run Pylint
+      run: pylint --max-line-length=120 --ignore-imports=yes -d duplicate-code $(git ls-files '*.py')
+
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
+      - name: Set up Docker image tag
+        id: docker_tag
+        run: echo "DOCKER_TAG=my-image-name:$(date +%s)" >> $GITHUB_ENV
+
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+        run: docker build . --file Dockerfile --tag ${{ env.DOCKER_TAG }}
+
+      - name: Testing mnist env on limited run
+        run: docker run ${{ env.DOCKER_TAG }} python3 src/train.py --dataset_name mnist --num_episodes 5 --train_limit 100
+
+      - name: Testing cifar env on limited run
+        run: docker run ${{ env.DOCKER_TAG }} python3 src/train.py --dataset_name mnist --num_episodes 5 --train_limit 100

@@ -1,20 +1,26 @@
 # -*- coding: utf-8 -*-
+"""
+main train logic for RL agent
+"""
 import argparse
+import gc
 import logging
 
-import pandas as pd
 import torch
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.logger import configure
 
-from src.env import ImagePerturbEnv
+from src.env import BlockBasedPerturbEnv, SinglePixelPerturbEnv
 from src.plotting import plt_helper
-
-# from src.env import *
-from src.rewards import *
-from src.utils import EndlessDataLoader, get_dataloaders, load_model, set_seed
+from src.rewards import reward_functions
+from src.utils import (
+    EndlessDataLoader,
+    RewardLoggerCallback,
+    get_dataloaders,
+    load_model,
+    set_seed,
+)
 
 # This is to redirect the logging output to a file
 LOGGING_OUTPUT_PATH = "./src/logs/sb3_log/"
@@ -23,71 +29,20 @@ new_logger = configure(LOGGING_OUTPUT_PATH, ["stdout", "csv"])
 logging.basicConfig(level=logging.INFO)
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-SEED = 42
-
-
-class RewardLoggerCallback(BaseCallback):
-    def __init__(self, check_freq):
-        super().__init__()
-        self.check_freq = check_freq
-        self.all_rewards = []
-        self.all_lengths = []
-        self.all_times = []
-        self.policy_gradient_losses = []
-        self.value_losses = []
-
-    def _on_step(self) -> bool:
-        # Check if it's time to log episode information
-        if self.n_calls % self.check_freq == 0:
-            # Retrieve the episode information from the buffer
-            ep_info = self.model.ep_info_buffer
-            if ep_info:
-                # Extract the latest episode information
-                info = ep_info[-1]
-                self.all_rewards.append(info["r"])
-                self.all_lengths.append(info["l"])
-                self.all_times.append(info["t"])
-
-        return True
-
-    def get_training_info(self):
-        """Retrieve the training information."""
-        return {
-            "rewards": self.all_rewards,
-            "lengths": self.all_lengths,
-            "times": self.all_times,
-        }
-
-
-reward_functions = {
-    # Measures the change in the feature space caused by the perturbation.
-    "reward_one": reward_distance,
-    # Calculates how much the perturbation reduces the classifier's confidence.
-    "reward_two": reward_improvement,
-    # Similar to reward_improvement, but with a penalty for taking more steps.
-    "reward_three": reward_time_decay,
-    # Checks if the perturbation leads to a successful misclassification.
-    "reward_four": reward_goal_achievement,
-    # A composite reward combining several aspects of the perturbation task.
-    "reward_five": reward_composite,
-    # Quantifies the alteration of the model's output due to the perturbation.
-    "reward_six": reward_output_difference,
-    # Rewards the agent for decreasing the model's confidence in the correct class.
-    "reward_seven": reward_target_prob_inversion,
-}
+# SEED = 42
 
 
 parser = argparse.ArgumentParser(description="Train an agent to perturb images.")
+parser.add_argument("--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar")
 parser.add_argument(
-    "--dataset_name", type=str, default="cifar", help="dataset to use. mnist of cifar"
+    "--env_type",
+    type=str,
+    choices=["single_pixel", "block_based"],
+    default="block_based",
+    help="Type of environment to use (single_pixel or block_based).",
 )
-
-parser.add_argument(
-    "--num_episodes", type=int, default=100, help="Number of episodes to run."
-)
-parser.add_argument(
-    "--batch_size", type=int, default=256, help="Batch size for training."
-)
+parser.add_argument("--num_episodes", type=int, default=100, help="Number of episodes to run.")
+parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training.")
 parser.add_argument(
     "--val_split",
     type=float,
@@ -128,13 +83,15 @@ parser.add_argument(
     "--reward_func",
     type=str,
     choices=list(reward_functions.keys()),
-    default="reward_seven",
+    default="reward_one",
     help="The name of the reward function to use.",
 )
+parser.add_argument("--num_runs", type=int, default=3, help="Number of training runs")
 
 
 args = parser.parse_args()
 
+env_type = args.env_type
 episodes = args.num_episodes
 batch_size = args.batch_size
 val_split = args.val_split
@@ -143,98 +100,102 @@ verbose = args.verbose
 prog_bar = args.prog_bar
 model_performance_save_path = args.model_performance_save_path
 dataset_name = args.dataset_name
+k = args.num_runs
 selected_reward_func = reward_functions[args.reward_func]
 model_save_path = args.model_save_path + "_" + dataset_name
-model_save_path = (
-    f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
-)
+model_save_path = f"{model_save_path}_{dataset_name}_episodes-{episodes}_trainlim-{train_limit}.zip"
 
 if __name__ == "__main__":
+    if env_type == "single_pixel":
+        EnvClass = SinglePixelPerturbEnv
+    elif env_type == "block_based":
+        EnvClass = BlockBasedPerturbEnv
+    else:
+        raise ValueError("Invalid environment type")
+
     assert train_limit % 50 == 0, "train_limit must be a multiple of 50"
     logging.info(args)
-    set_seed(SEED)
+    torch.cuda.empty_cache()
+    gc.collect()
+    cumulative_steps = 0
+    models = {}
 
-    train_loader, valid_loader, test_loader = get_dataloaders(
-        dataset_name=dataset_name,
-        batch_size=50,
-        val_split=val_split,
-        seed=SEED,
-        train_limit=train_limit,
-    )
+    for run in range(k):
+        logging.info(f"Starting training run {run + 1}/{k}")
+        min_seed = 0
+        max_seed = 100
 
-    steps_per_episode = len(train_loader)  # number of images to perturb per episode
-    total_timesteps = episodes * steps_per_episode
+        # Generate a random seed value within the specified range
+        # SEED = random.randint(min_seed, max_seed)
+        SEED = 42
+        logging.info(f"Starting training run with seed={SEED}")
 
-    # classififer
-    model = load_model(dataset_name=dataset_name)
+        # seed=base_seed+run
+        set_seed(SEED)
 
-    #
-    env = ImagePerturbEnv(
-        dataloader=EndlessDataLoader(train_loader),
-        model=model,
-        reward_func=selected_reward_func,  # Pass the reward function here
-        steps_per_episode=steps_per_episode,
-        verbose=verbose,
-    )
+        train_loader, valid_loader, test_loader = get_dataloaders(
+            dataset_name=dataset_name,
+            batch_size=20 if dataset_name == "cifar10" else 50,
+            val_split=val_split,
+            seed=SEED,
+            train_limit=train_limit,
+        )
 
-    # env
-    # Note the EndlessDataLoader wrapper
-    # This is to ensure that when a dataloader has been exhausted, it is refreshed
-    # by starting from the beginning
-    train_env = ImagePerturbEnv(
-        dataloader=EndlessDataLoader(train_loader),
-        model=model,
-        reward_func=selected_reward_func,
-        steps_per_episode=steps_per_episode,
-        verbose=verbose,
-    )
-    # eventually use this for validation
-    valid_env = ImagePerturbEnv(
-        dataloader=EndlessDataLoader(valid_loader),
-        model=model,
-        reward_func=selected_reward_func,
-        steps_per_episode=steps_per_episode,
-        verbose=verbose,
-    )
+        steps_per_episode = len(train_loader)  # number of images to perturb per episode
+        total_timesteps = episodes * steps_per_episode
 
-    # Training here
-    # callback necessary because defaults to last 100 episodes
-    callback = RewardLoggerCallback(check_freq=steps_per_episode)
-    model = PPO(
-        "MlpPolicy",
-        train_env,
-        device=DEVICE,
-        verbose=1,
-        n_steps=steps_per_episode,
-        batch_size=batch_size,
-    )
-    model.set_logger(new_logger)
-    logging.info(f"model device: {model.device}")
-    model.learn(
-        total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback
-    )
-    logging.info("Training complete.")
-    logging.info(f"Saving model to {model_save_path}")
-    model.save(model_save_path)
+        # classififer
+        model = load_model(dataset_name=dataset_name)
 
-    #     valid_env = ImagePerturbEnv(
-    #     dataloader=EndlessDataLoader(valid_loader), model=model, steps_per_episode=steps_per_episode, verbose=verbose
-    # )
+        train_env = EnvClass(
+            dataloader=EndlessDataLoader(train_loader),
+            model=model,
+            reward_func=selected_reward_func,
+            steps_per_episode=steps_per_episode,
+            verbose=verbose,
+        )
+        # eventually use this for validation
+        valid_env = EnvClass(
+            dataloader=EndlessDataLoader(valid_loader),
+            model=model,
+            reward_func=selected_reward_func,
+            steps_per_episode=steps_per_episode,
+            verbose=verbose,
+        )
 
-    # Evaluate the policy with the validation environment
-    mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=10)
-    logging.info(f"Validation results: Mean reward: {mean_reward} +/- {std_reward}")
-    logging.info(f"Rewrd func calculated using{selected_reward_func}")
+        # Training here
+        # callback necessary because defaults to last 100 episodes
+        callback = RewardLoggerCallback(check_freq=steps_per_episode)
+        model = PPO(
+            "MlpPolicy",
+            train_env,
+            device=DEVICE,
+            verbose=1,
+            n_steps=steps_per_episode,
+            batch_size=batch_size,
+        )
 
-    episode_info = callback.get_training_info()
-    df = pd.DataFrame(episode_info)
-    df.rename(
-        columns={"rewards": "rewards", "lengths": "lengths", "times": "times"},
-        inplace=True,
-    )
-    df.to_csv(f"{model_performance_save_path}.csv")
-    logging.info(f"Dataframe saved to {model_performance_save_path}")
+        model.set_logger(new_logger)
+        logging.info(f"model device: {model.device}")
+        model.learn(total_timesteps=total_timesteps, progress_bar=prog_bar, callback=callback)
+
+        # Evaluate the policy with the validation environment
+        mean_reward, std_reward = evaluate_policy(model, valid_env, n_eval_episodes=10)
+        logging.info(f"Validation results: Mean reward: {mean_reward} +/- {std_reward}")
+        logging.info(f"Rewrd func calculated using{selected_reward_func}")
+
+        models[run] = (model, mean_reward, std_reward)
+
+    # Find the best model based on mean_reward
+    best_run = max(models, key=lambda x: models[x][1])
+    best_model, best_mean_reward, _ = models[best_run]
+    logging.info(f"Best model is from run {best_run + 1} with mean reward: {best_mean_reward}")
+    logging.info(f"Saving best model to {model_save_path}")
+    best_model.save(model_save_path)
 
     # If `plot_rewards_and_cumulative` requires just the rewards, you can extract them
-    plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv")
+
+    plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv", episodes)
     # plot_rewards_and_cumulative(df["rewards"])
+    logging.info(f"Completed {k} training runs")
+    # plt_helper(f"{LOGGING_OUTPUT_PATH}/progress.csv")
