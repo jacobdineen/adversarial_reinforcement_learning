@@ -34,9 +34,7 @@ def get_cnn_model(input_shape) -> nn.Sequential:
 
 
 def get_dnn_model(number_of_class_labels) -> nn.Sequential:
-    model = nn.Sequential(
-        nn.Linear(number_of_class_labels, 128).to(device), nn.ReLU()
-    ).to(device)
+    model = nn.Sequential(nn.Linear(number_of_class_labels, 128).to(device), nn.ReLU()).to(device)
     return model
 
 
@@ -81,14 +79,10 @@ def update_q_model(experience_replay, q_model, batch_size, discount_factor):
         action_taken: int = action
         reward_obtained: float = reward
 
-        target = q_model(
-            initial_image_state.unsqueeze(0), initial_image_probability_state
-        )[0]
+        target = q_model(initial_image_state.unsqueeze(0), initial_image_probability_state)[0]
         # input(target.shape)
 
-        Q_sa = torch.max(
-            q_model(next_image_state.unsqueeze(0), next_image_probability_state)
-        )
+        Q_sa = torch.max(q_model(next_image_state.unsqueeze(0), next_image_probability_state))
         # input(Q_sa.shape)
 
         if reward_obtained == 10 or reward_obtained == -1:
@@ -244,9 +238,7 @@ def main():
             if np.random.rand() < epsilon:
                 action = np.random.randint(0, len(blocks))
             else:
-                action = torch.argmax(
-                    q_model(sample_image.unsqueeze(0), sample_image_probability)
-                ).item()
+                action = torch.argmax(q_model(sample_image.unsqueeze(0), sample_image_probability)).item()
 
             attack_region = torch.zeros(input_shape)
             attack_coord = blocks[action]
@@ -257,13 +249,9 @@ def main():
             ] = 1
 
             sample_image_noise = sample_image + (attack_region * LAMBDA).to(device)
-            sample_image_noise_probability = mnist_model(
-                sample_image_noise.unsqueeze(0)
-            )
+            sample_image_noise_probability = mnist_model(sample_image_noise.unsqueeze(0))
 
-            modified_predicted_label = torch.argmax(
-                mnist_model(sample_image_noise.unsqueeze(0)), dim=1
-            )
+            modified_predicted_label = torch.argmax(mnist_model(sample_image_noise.unsqueeze(0)), dim=1)
 
             if modified_predicted_label != original_predicted_label:
                 print("here")
@@ -312,9 +300,7 @@ def main():
 
         if len(experience_replay) > max_buffer_size:
             tqdm.write(f"Updating Q Model")
-            q_model = update_q_model(
-                experience_replay, q_model, batch_size, discount_factor
-            )
+            q_model = update_q_model(experience_replay, q_model, batch_size, discount_factor)
             experience_replay = []
 
             tqdm.write(f"Successes: {success}")
@@ -323,9 +309,7 @@ def main():
             success = []
 
         if game_number % 100 == 0:
-            tqdm.write(
-                f"Episode: {game_number}, Success rate: {np.mean(np.array(success))}"
-            )
+            tqdm.write(f"Episode: {game_number}, Success rate: {np.mean(np.array(success))}")
 
     print(f"Final success rate: {np.mean(np.array(success))}")
     print(f"Saving model to q_model.pt")
