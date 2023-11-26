@@ -30,13 +30,9 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
     if dataset_name.lower() == "mnist":
         logging.info(f"====> Loading {dataset_name} data")
         train_set = datasets.MNIST("./data", train=True, download=True, transform=transform)
-        # test_set = datasets.MNIST(
-        #     "./data", train=False, download=True, transform=transform
-        # )
+        test_set = datasets.MNIST("./data", train=False, download=True, transform=transform)
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
-        # test_loader = torch.utils.data.DataLoader(
-        #     test_set, batch_size=batch_size, shuffle=False
-        # )
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
         model = resnet18(num_classes=10)
         model.conv1 = nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         model = model.to(device)
@@ -50,14 +46,14 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
             ]
         )
         train_set = datasets.CIFAR10("./data", train=True, download=True, transform=transform)
-        # test_set = datasets.CIFAR10(
-        #     "./data", train=False, download=True, transform=transform
-        # )
+        test_set = datasets.CIFAR10("./data", train=False, download=True, transform=transform)
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
-        # test_loader = torch.utils.data.DataLoader(
-        #     test_set, batch_size=batch_size, shuffle=False
-        # )
-        model = resnet18(num_classes=10)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
+        # model = resnet18(num_classes=10)
+        model = resnet18(pretrained=True)  # This loads the model with pre-trained weights
+        num_ftrs = model.fc.in_features
+        model.fc = torch.nn.Linear(num_ftrs, 10)  # 10 classes for CIFAR-10
+
         model = model.to(device)
     elif dataset_name.lower() == "mnist2":
         logging.info(f"====> Loading {dataset_name} data")
@@ -74,9 +70,9 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
         model = model.to(device)
 
     # Other hyperparameters and optimizer setup
-    learning_rate = 0.01
+    learning_rate = 0.001
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, weight_decay=0.001, momentum=0.9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.001)
     logging.info(f"====> num_epochs: {num_epochs}")
     logging.info(f"====> learning_rate: {learning_rate}")
     logging.info(f"====> Started training Resnet-18 {dataset_name} model")
@@ -101,8 +97,22 @@ def train_model(dataset_name, save_path, batch_size, num_epochs):
             del images, labels, outputs
             torch.cuda.empty_cache()
             gc.collect()
-
         logging.info("Epoch [{}/{}], Loss: {:.4f}".format(epoch + 1, num_epochs, loss.item()))
+
+    # do evaluation over test set
+    total_correct = 0
+    total_samples = 0
+    with torch.no_grad():  # Disable gradient computation
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)  # Get raw output from the model
+            _, predicted = torch.max(outputs, 1)  # Get the predicted labels
+
+            total_correct += (predicted == labels).sum().item()
+            total_samples += labels.size(0)
+
+    accuracy = total_correct / total_samples
+    logging.info(f"====> Accuracy over the test set: {accuracy * 100:.2f}%")
 
     # Save the model with the dataset name
     logging.info(f"====> Finished training {dataset_name} model")
@@ -116,7 +126,7 @@ if __name__ == "__main__":
     parser.add_argument("dataset_name", type=str, help="Name of the dataset")
     parser.add_argument("location_path", type=str, help="Path to save the model")
     parser.add_argument("--batch_size", type=int, default=64, help="Batch size for training")
-    parser.add_argument("--num_epochs", type=int, default=5, help="Number of epochs for training")
+    parser.add_argument("--num_epochs", type=int, default=1, help="Number of epochs for training")
     args = parser.parse_args()
 
     train_model(args.dataset_name, args.location_path, args.batch_size, args.num_epochs)

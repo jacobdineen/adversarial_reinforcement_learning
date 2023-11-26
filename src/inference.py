@@ -13,6 +13,7 @@ from src.rewards import reward_functions
 from src.utils import EndlessDataLoader, get_dataloaders, load_model, set_seed
 
 # from stable_baselines3.common.evaluation import evaluate_policy
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def plot_best_examples_cifar(model, images, perturbed_images, rewards):
@@ -125,6 +126,67 @@ def plot_best_examples_mnist(model, images, perturbed_images, rewards):
     plt.show()
 
 
+def get_image_classifier_accuracy(model, test_loader):
+    total_correct = 0
+    total_samples = 0
+
+    with torch.no_grad():  # Disable gradient computation
+        for images, labels in test_loader:
+            images, labels = images.to(DEVICE), labels.to(DEVICE)  # Move data to the same device as the model
+            outputs = model(images)  # Get raw output from the model
+            _, predicted = torch.max(outputs, 1)  # Get the predicted labels
+
+            total_correct += (predicted == labels).sum().item()
+            total_samples += labels.size(0)
+
+    accuracy = total_correct / total_samples
+    return accuracy
+
+
+def get_perturbed_classifier_accuracy_and_plot(model, ppomodel, env, max_images_to_plot=10):
+    total_correct = 0
+    total_samples = 0
+    incorrect_images = []
+
+    with torch.no_grad():  # Disable gradient computation
+        for images, labels in env.dataloader.dataloader:
+            images, labels = images.to("cpu"), labels.to("cpu")
+            actions = ppomodel.predict(images)
+            perturbed_images, _, _, _, _ = env.step(actions[0], testing=False)
+            outputs = model(perturbed_images)
+            _, predicted = torch.max(outputs, 1)
+
+            total_correct += (predicted == labels).sum().item()
+            total_samples += labels.size(0)
+
+            # Identify and store incorrectly classified images
+            misclassified_indices = (predicted != labels).nonzero(as_tuple=True)[0]
+            for idx in misclassified_indices:
+                if len(incorrect_images) < max_images_to_plot:
+                    incorrect_images.append(
+                        (images[idx], perturbed_images[idx], labels[idx].item(), predicted[idx].item())
+                    )
+
+    accuracy = total_correct / total_samples
+
+    # Plotting the images
+    num_images = len(incorrect_images)
+    _, axs = plt.subplots(num_images, 2, figsize=(10, 5 * num_images))
+
+    for i, (orig, perturbed, orig_label, perturbed_label) in enumerate(incorrect_images):
+        axs[i, 0].imshow(orig.permute(1, 2, 0).numpy(), cmap="gray")
+        axs[i, 0].set_title(f"Original (Label: {orig_label})")
+        axs[i, 0].axis("off")
+
+        axs[i, 1].imshow(perturbed.permute(1, 2, 0).numpy(), cmap="gray")
+        axs[i, 1].set_title(f"Perturbed (Label: {perturbed_label})")
+        axs[i, 1].axis("off")
+
+    plt.show()
+
+    return accuracy
+
+
 def main(env_type, val_split, dataset_name, selected_reward_func, model_save_path):
     if env_type == "single_pixel":
         EnvClass = SinglePixelPerturbEnv
@@ -137,7 +199,7 @@ def main(env_type, val_split, dataset_name, selected_reward_func, model_save_pat
     torch.cuda.empty_cache()
     gc.collect()
 
-    SEED = 42
+    SEED = 1
     # seed=base_seed+run
     set_seed(SEED)
 
@@ -153,6 +215,9 @@ def main(env_type, val_split, dataset_name, selected_reward_func, model_save_pat
 
     # classififer
     model = load_model(dataset_name=dataset_name)
+    model.eval()
+    accuracy = get_image_classifier_accuracy(model, test_loader)
+    print(f"Classifier Accuracy over the test set: {accuracy * 100:.2f}%")
 
     test_env = EnvClass(
         dataloader=EndlessDataLoader(test_loader),
@@ -164,13 +229,20 @@ def main(env_type, val_split, dataset_name, selected_reward_func, model_save_pat
 
     ppo_model = PPO.load(model_save_path)
     print("Model loaded successfully")
-    actions = ppo_model.predict(test_env.images)
+    # perturbed_images_ = []
+    # real_images = []
+    # for i in range(steps_per_episode / args.batch_size):
+    #     actions = ppo_model.predict(test_env.images)
+    #     images, perturbed_images, rewards, _ = test_env.step(actions[0], testing=True)
+    #     perturbed_images_.append(perturbed_images)
+    #     real_images.append(images)
+    accuracy = get_perturbed_classifier_accuracy_and_plot(model, ppo_model, test_env)
+    print(f"Classifier Accuracy over the test set: {accuracy * 100:.2f}%")
 
-    images, perturbed_images, rewards, _ = test_env.step(actions[0], testing=True)
-    if dataset_name == "mnist":
-        plot_best_examples_mnist(model, images, perturbed_images, rewards)
-    else:
-        plot_best_examples_cifar(model, images, perturbed_images, rewards)
+    # if dataset_name == "mnist":
+    #     plot_best_examples_mnist(model, images, perturbed_images, rewards)
+    # else:
+    #     plot_best_examples_cifar(model, images, perturbed_images, rewards)
 
 
 if __name__ == "__main__":
@@ -199,7 +271,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_save_path",
         type=str,
-        # default="src/model_weights/ppo_cifar_cifar_episodes-10_trainlim-100.zip",
+        default="/home/jdineen/Documents/adv_rl/src/model_weights/ppo_cifar_cifar_episodes-50_trainlim-1000.zip",
         help="Where to load trained PPO model",
     )
     # src/model_weights/ppo_mnist_mnist_episodes-100_trainlim-1000
