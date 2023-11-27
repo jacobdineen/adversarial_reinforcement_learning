@@ -4,6 +4,7 @@ import gc
 import logging
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn.functional as F
 from stable_baselines3 import PPO
@@ -152,6 +153,7 @@ def get_perturbed_classifier_accuracy_and_plot(model, ppomodel, env, max_images_
         for images, labels in env.dataloader.dataloader:
             images, labels = images.to("cpu"), labels.to("cpu")
             actions = ppomodel.predict(images)
+            print(actions)
             perturbed_images, _, _, _, _ = env.step(actions[0], testing=False)
             outputs = model(perturbed_images)
             _, predicted = torch.max(outputs, 1)
@@ -164,22 +166,33 @@ def get_perturbed_classifier_accuracy_and_plot(model, ppomodel, env, max_images_
             for idx in misclassified_indices:
                 if len(incorrect_images) < max_images_to_plot:
                     incorrect_images.append(
-                        (images[idx], perturbed_images[idx], labels[idx].item(), predicted[idx].item())
+                        (
+                            images[idx],
+                            perturbed_images[idx],
+                            labels[idx].item(),
+                            predicted[idx].item(),
+                            actions[0][idx].item(),
+                        )
                     )
+            break
 
+    logging.info(f"Total Correct: {total_correct}")
+    logging.info(f"Total Samples: {total_samples}")
+    logging.info(f"Total misclassified images: {len(incorrect_images)}")
     accuracy = total_correct / total_samples
 
     # Plotting the images
     num_images = len(incorrect_images)
     _, axs = plt.subplots(num_images, 2, figsize=(10, 5 * num_images))
 
-    for i, (orig, perturbed, orig_label, perturbed_label) in enumerate(incorrect_images):
+    # Modify the plotting code to display the action taken
+    for i, (orig, perturbed, orig_label, perturbed_label, action) in enumerate(incorrect_images):
         axs[i, 0].imshow(orig.permute(1, 2, 0).numpy(), cmap="gray")
         axs[i, 0].set_title(f"Original (Label: {orig_label})")
         axs[i, 0].axis("off")
 
         axs[i, 1].imshow(perturbed.permute(1, 2, 0).numpy(), cmap="gray")
-        axs[i, 1].set_title(f"Perturbed (Label: {perturbed_label})")
+        axs[i, 1].set_title(f"Perturbed (Label: {perturbed_label}, Action: {action})")
         axs[i, 1].axis("off")
 
     plt.show()
@@ -202,13 +215,14 @@ def main(env_type, val_split, dataset_name, selected_reward_func, model_save_pat
     SEED = 1
     # seed=base_seed+run
     set_seed(SEED)
+    batch_size = 20 if dataset_name == "cifar10" else 50
 
     _, _, test_loader = get_dataloaders(
         dataset_name=dataset_name,
-        batch_size=20 if dataset_name == "cifar10" else 50,
+        batch_size=batch_size,
         val_split=val_split,
         seed=SEED,
-        train_limit=None,
+        train_limit=10000,
     )
 
     steps_per_episode = len(test_loader)  # number of images to perturb per episode
@@ -228,16 +242,82 @@ def main(env_type, val_split, dataset_name, selected_reward_func, model_save_pat
     )
 
     ppo_model = PPO.load(model_save_path)
-    print("Model loaded successfully")
-    # perturbed_images_ = []
-    # real_images = []
-    # for i in range(steps_per_episode / args.batch_size):
-    #     actions = ppo_model.predict(test_env.images)
-    #     images, perturbed_images, rewards, _ = test_env.step(actions[0], testing=True)
-    #     perturbed_images_.append(perturbed_images)
-    #     real_images.append(images)
-    accuracy = get_perturbed_classifier_accuracy_and_plot(model, ppo_model, test_env)
-    print(f"Classifier Accuracy over the test set: {accuracy * 100:.2f}%")
+    done = False
+    label_flips = []
+    num_samples = 0
+
+    while not done:
+        # Get predictions for original images
+        original_images = test_env.images.clone()
+        original_outputs = model(original_images)
+        _, original_predictions = torch.max(original_outputs, dim=1)
+
+        # Predict actions for the current images using the PPO model
+        actions, _ = ppo_model.predict(original_images)
+
+        # Take a step in the environment using the predicted actions
+        # pylint disable=W0632
+        perturbed_images, _, dones, _ = test_env.step(actions=actions, testing=False)
+        # Get predictions for perturbed images
+        perturbed_outputs = model(perturbed_images)
+        _, perturbed_predictions = torch.max(perturbed_outputs, dim=1)
+
+        # Compare predictions to find label flips
+        flipped_indices = (original_predictions != perturbed_predictions).nonzero(as_tuple=True)[0]
+        for idx in flipped_indices:
+            label_flips.append(
+                {
+                    "original_image": original_images[idx].cpu(),
+                    "original_label": original_predictions[idx].cpu().item(),
+                    "perturbed_image": perturbed_images[idx].cpu(),
+                    "perturbed_label": perturbed_predictions[idx].cpu().item(),
+                }
+            )
+
+        num_samples += batch_size
+        print(f"Number of label flips: {len(label_flips)}")
+        print(f"Number of samples: {num_samples}")
+        print(f"Percentage of label flips: {len(label_flips) / num_samples * 100:.2f}%")
+        # if num_samples >= 1000:
+        if any(dones):
+            num_images_to_plot = min(5, len(label_flips))
+            _, axs = plt.subplots(num_images_to_plot, 2, figsize=(10, 2 * num_images_to_plot))
+
+            for i in range(num_images_to_plot):
+                info = label_flips[i]
+
+                # Convert the tensors to NumPy arrays
+                original_img = info["original_image"].numpy()
+                perturbed_img = info["perturbed_image"].numpy()
+
+                # Normalize the images if they're not already in the range [0, 1]
+                original_img = np.clip(original_img, 0, 1)
+                perturbed_img = np.clip(perturbed_img, 0, 1)
+
+                # Plot the original image
+                axs[i, 0].imshow(original_img.transpose(1, 2, 0))  # Transpose the axes from (C, H, W) to (H, W, C)
+                axs[i, 0].title.set_text(f'Original (Label: {info["original_label"]})')
+                axs[i, 0].axis("off")
+
+                # Plot the perturbed image
+                axs[i, 1].imshow(perturbed_img.transpose(1, 2, 0))  # Transpose the axes from (C, H, W) to (H, W, C)
+                axs[i, 1].title.set_text(f'Perturbed (Label: {info["perturbed_label"]})')
+                axs[i, 1].axis("off")
+
+            plt.tight_layout()
+            plt.show()
+            break
+    # print(rendered)
+    # print("Model loaded successfully")
+    # # perturbed_images_ = []
+    # # real_images = []
+    # # for i in range(steps_per_episode / args.batch_size):
+    # #     actions = ppo_model.predict(test_env.images)
+    # #     images, perturbed_images, rewards, _ = test_env.step(actions[0], testing=True)
+    # #     perturbed_images_.append(perturbed_images)
+    # #     real_images.append(images)
+    # accuracy = get_perturbed_classifier_accuracy_and_plot(model, ppo_model, test_env)
+    # print(f"Classifier Accuracy over the test set: {accuracy * 100:.2f}%")
 
     # if dataset_name == "mnist":
     #     plot_best_examples_mnist(model, images, perturbed_images, rewards)
@@ -271,7 +351,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_save_path",
         type=str,
-        default="/home/jdineen/Documents/adv_rl/src/model_weights/ppo_cifar_cifar_episodes-50_trainlim-1000.zip",
+        default="/home/jdineen/Documents/adv_rl/src/model_weights/ppo_mnist_mnist_episodes-20_trainlim-1000.zip",
         help="Where to load trained PPO model",
     )
     # src/model_weights/ppo_mnist_mnist_episodes-100_trainlim-1000
